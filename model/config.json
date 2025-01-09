@@ -1,0 +1,40 @@
+{
+  "chatgpt-4o": {
+    "api_key": "5fea49cd1d9b404598ed9d2259738486",
+    "azure_endpoint": "https://ll274349293.openai.azure.com/openai/deployments/gpt-4o/chat/completions?",
+    "api_version": "2024-08-01-preview"
+  },
+  "chatgpt-4o-mini": {
+    "api_key": "5fea49cd1d9b404598ed9d2259738486",
+    "azure_endpoint": "https://ll274349293.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?",
+    "api_version": "2024-08-01-preview"
+  },
+  "qwen": {
+    "api_key": "sk-824ae94382af45a9857c20853793dcbb",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model_name_list": [
+      "qwen-long",
+      "qwen-turbo",
+      "qwen-plus",
+      "qwen-max",
+      "qwen-max-0428",
+      "qwen-max-0403",
+      "qwen-max-0107",
+      "qwen-max-longcontext"
+    ]
+  },
+  "kimi": {
+    "api_key": "sk-gl5n4T1iBsCcDGhl7r61T9dZdK1JLg4h3Tjb0WINONfVGSGR",
+    "base_url": "https://api.moonshot.cn/v1",
+    "model_name_list": [
+      "moonshot-v1-8k"
+    ]
+  },
+  "wenxin": {
+    "api_key": "qGmPd8UlxI6xfGeTry7Sw5bL",
+    "secret_key": "j6n6MzEuGQSFG5OgIjnOtWGxPGaPn9Yh",
+    "model_name_list": [
+      "ERNIE-4.0-8K"
+    ]
+  }
+}

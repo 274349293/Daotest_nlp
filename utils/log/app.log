@@ -1,0 +1,31 @@
+2025-01-09 10:50:24,659 - HuiRen fib api - INFO - ------------------start--------------------
+2025-01-09 10:50:24,660 - HuiRen fib api - INFO - messages: [{'role': 'system', 'content': '汇仁是一家大型医药企业集团，汇仁公司新招聘了一批新员工，公司已经对新员工完成了入职培训，现在以考试的方式检查新员工是否已经掌握了培训内容。你是一名资深的培训经理，你的任务如下：{\n1.判断员工作答的对错。考试题目全部为填空题，题目中的每一个##代表一个所需要填写的空位，每个题目中如果有N个空位，则该题目所需要写N个答案，答案中每个空位的答案使用 | 隔开。示例如下：{\n题目：在与客户洽谈时间的安排上，要保证时间满足##、##和##的要求。\n标准答案：客户|公司审批|活动准备\n}，这条题目需要填写3个空位，标准答案中有三个空位的答案依次对应题目中的空位，将标准答案填写到题目中则应该为：在与客户洽谈时间的安排上，要保证时间满足客户、公司审批和活动准备的要求。\n2.判断对错的标准如下：\n{\n2.1 逐个比较员工作答每个空位的答案和标准答案中每个空位的答案，如果完全相同，则该空位标记为正确。如果不完全相同，但将答案填入题目中所表达的语义相同或95%以上相同，则该空位也标记为正确。\n2.2 逐个比较员工作答每个空位的答案和标准答案中每个空位的答案，如果不完全相同，并且将答案填入题目中所表达的语义也不相同，则该空位标记为错误。\n2.3 如果员工的作答和标准答案差距非常大，则该空位标记为错误。\n2.4 用户作答中出现符号与标准答案不同的情况，如大小写不同，或者%写成“百分之”类似情况，只要语义和标准答案相同，一律判断为正确。\n2.5 正确的填空为标记为1，错误的填空位标记为0。示例如下：{\n题目：在与客户洽谈时间的安排上，要保证时间满足##、##和##的要求。\n标准答案：客户|公司审批|活动准备\n用户作答：自己|公司审批通过|活动准备\n判断结果：[0,1,1]\n}\n}\n3.回答的输出格式为固定格式，为json格式，示例如下：\n{\n    "result":[0,1,1]\n}\n'}, {'role': 'user', 'content': "以下是员工作答的题目和答案信息：{'题目': '对于直供回款客户，城市经理应立即与客户采购经理确定要货计划，并督促客户采购经理##', '标准答案': '走付款流程回款', '员工作答': '制作订单，跟踪客户付款流程'}"}]
+2025-01-09 10:50:26,222 - HuiRen fib api - INFO - fib api return 题目id success, model name is gpt-4o
+2025-01-09 10:50:26,222 - HuiRen fib api - INFO - result is  {'result': [0]}
+2025-01-09 10:51:10,008 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 10:51:10,008 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 10:51:10,008 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 10:51:12,073 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 10:51:12,073 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 10:51:12,073 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 10:59:40,156 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 10:59:40,157 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 10:59:40,157 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 15:45:25,637 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:45:25,637 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:45:25,637 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 15:48:37,510 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:48:37,511 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:48:37,511 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 15:48:38,516 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:48:38,516 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:48:38,516 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 15:48:47,147 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:48:47,147 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:48:47,148 - HuiRen ques judgment api - INFO - fb judgment result is incorrect, standardAnswer is 95, answer is 捌拾伍
+2025-01-09 15:51:20,392 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:51:20,392 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:51:20,392 - HuiRen ques judgment api - INFO - fb judgment result is incorrect, standardAnswer is 95, answer is 捌拾伍
+2025-01-09 15:51:25,109 - HuiRen ques judgment api - INFO - ------------------start--------------------
+2025-01-09 15:51:25,109 - HuiRen ques judgment api - INFO - question type is fb
+2025-01-09 15:51:25,110 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
