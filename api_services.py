@@ -3,6 +3,7 @@ from llm_api_service.ques_judg import ques_judgment, QjInfo
 from llm_api_service.behavioral_style_test import behavioral_style, BehavioralStyleInfo
 from llm_api_service.exam_marking import exam_mark, ExamQaInfo
 from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
+from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
 
 app = FastAPI()
 
@@ -12,6 +13,7 @@ app = FastAPI()
 2. behavioral_style_test 学员行为风格测试获取结果接口(视频流中的互动题)
 3. exam_mark 通用考试评价接口(简答题和阅读理解题)
 4. practice_stream 练习评价接口，流式返回
+5. mr_dialogue 案例分析题接口，课后互动题-多轮对话 
 """
 
 
@@ -36,6 +38,11 @@ def exam_mark_fun(qa_info: ExamQaInfo):
 @app.post("/practice_stream")
 async def practice_stream_fun(qa_info: PracticeQaInfo):
     return await get_stream_response(qa_info)
+
+
+@app.post("/mr_dialogue")
+async def multi_round_dialogue_fun(dialogue_info: DialogueInfo):
+    return await multi_round_dialogue(dialogue_info)
 
 
 if __name__ == "__main__":

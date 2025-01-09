@@ -162,7 +162,7 @@ def get_mark_prompt(dialogue_mark_info: DialogueMarkInfo):
 
 
 @app.post("/mr_dialogue")
-def multi_round_dialogue(dialogue_info: DialogueInfo):
+async def multi_round_dialogue(dialogue_info: DialogueInfo):
     def qwen_generate() -> bytes:
         for chunk in completion:
             try:
@@ -291,9 +291,3 @@ def behavioral_style(behavioral_style_info: BehavioralStyleInfo):
     except Exception as e:
         logger.error(f"behavioral_style error: {e}")
         return "error"
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8400)
