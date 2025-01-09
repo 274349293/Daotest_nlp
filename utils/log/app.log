@@ -29,3 +29,6 @@
 2025-01-09 15:51:25,109 - HuiRen ques judgment api - INFO - ------------------start--------------------
 2025-01-09 15:51:25,109 - HuiRen ques judgment api - INFO - question type is fb
 2025-01-09 15:51:25,110 - HuiRen ques judgment api - INFO - fb judgment result is correct ,standardAnswer is 85, answer is 捌拾伍
+2025-01-09 16:19:16,761 - HuiRen behavioral style test api - INFO - ------------------start--------------------
+2025-01-09 16:19:16,761 - HuiRen behavioral style test api - INFO - A1=2 B1=1 A2=3 B2=0 A3=1 B3=2 A4=1 B4=2 A5=1 B5=2 A6=1 B6=2 A7=1 B7=2 A8=2 B8=1 A9=1 B9=2 A10=1 B10=2 A11=1 B11=2 A12=2 B12=1 A13=2 B13=1 A14=2 B14=1 A15=1 B15=2 A16=3 B16=0 A17=1 B17=2 A18=1 B18=2
+2025-01-09 16:19:16,769 - HuiRen behavioral style test api - INFO - behavioral style test result is 社交型

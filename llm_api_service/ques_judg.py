@@ -269,8 +269,3 @@ def ques_judgment(qj_info: QjInfo):
     else:
         logger.error(f"param type error: type is {qj_info.type} , return 0")
         return 0
-
-# if __name__ == "__main__":
-#     import uvicorn
-#
-#     uvicorn.run(app, host="0.0.0.0", port=8300)
