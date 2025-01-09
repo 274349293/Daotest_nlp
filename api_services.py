@@ -34,9 +34,8 @@ def exam_mark_fun(qa_info: ExamQaInfo):
 
 
 @app.post("/practice_stream")
-def practice_stream_fun(qa_info: PracticeQaInfo):
-    practice_res = get_stream_response(qa_info)
-    return practice_res
+async def practice_stream_fun(qa_info: PracticeQaInfo):
+    return await get_stream_response(qa_info)
 
 
 if __name__ == "__main__":
