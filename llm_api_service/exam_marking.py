@@ -1,11 +1,9 @@
 import json
 import ast
-from fastapi import FastAPI
 from model.llm_service import LLMService
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
 
-app = FastAPI()
 logger = CustomLogger("HuiRen exam marking api")
 system_prompt = """汇仁是一家大型医药企业集团，汇仁公司新招聘了一批新员工，公司已经对新员工完成了入职培训，现在以考试的方式检查新员工是否已经掌握了培训内容。你是一名资深的培训经理，你的任务如下：{
 1.对员工的作答评分，评分规定：满分为100分，最低分为0分，请从0-100直接给出一个整数作为员工作答分数。先输出评价，再进行评分。
@@ -38,7 +36,7 @@ system_prompt = """汇仁是一家大型医药企业集团，汇仁公司新招�
 llm = LLMService(llm_logger=logger)
 
 
-class QaInfo(BaseModel):
+class ExamQaInfo(BaseModel):
     id: str
     question: str
     answer: str
@@ -94,8 +92,7 @@ def json_formatting_repair(json_str: str):
     return None
 
 
-@app.post("/exam_mark")
-def exam_mark(qa_info: QaInfo):
+def exam_mark(qa_info: ExamQaInfo):
     logger.info("------------------start--------------------")
     for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
         try:
@@ -126,10 +123,3 @@ def exam_mark(qa_info: QaInfo):
             logger.error(f"exam mark error in {model_name}: {e}")
     logger.error(f"{qa_info.id} exam mark api return failed , return is None")
     return {"score": 1, "llm_result": "None"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8100)
-

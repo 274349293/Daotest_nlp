@@ -1,4 +1,3 @@
-from fastapi import FastAPI
 import json
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -34,10 +33,9 @@ system_prompt = """汇仁是一家大型医药企业集团，汇仁公司新招�
 
 """
 llm = LLMService(llm_logger=logger)
-app = FastAPI()
 
 
-class QaInfo(BaseModel):
+class PracticeQaInfo(BaseModel):
     id: str
     question: str
     answer: str
@@ -51,8 +49,7 @@ class QaInfo(BaseModel):
     # badAnswerInfo: str
 
 
-@app.post("/practice_stream")
-async def get_stream_response(qa_info: QaInfo):
+async def get_stream_response(qa_info: PracticeQaInfo):
     logger.info("--------------------start--------------------------")
 
     def qwen_generate() -> bytes:
@@ -125,9 +122,3 @@ async def get_stream_response(qa_info: QaInfo):
             logger.error(f"{qa_info.id} practice stream api error: {e}, model name is {model_name} ")
     logger.error(f"{qa_info.id} practice stream api return failed , return is None")
     return None
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)

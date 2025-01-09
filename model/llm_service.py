@@ -15,7 +15,7 @@ class LLMService:
 
     @staticmethod
     def get_config():
-        with open('D:\project\huiren_nlp\llm_api_service\config.json') as config_file:
+        with open('./model/config.json') as config_file:
             return json.load(config_file)
 
     def qwen_response(self, model_name="qwen-max", message=None):
