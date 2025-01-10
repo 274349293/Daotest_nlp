@@ -4,6 +4,7 @@ from llm_api_service.behavioral_style_test import behavioral_style, BehavioralSt
 from llm_api_service.exam_marking import exam_mark, ExamQaInfo
 from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
 from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
+from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
 
 app = FastAPI()
 
@@ -43,6 +44,11 @@ async def practice_stream_fun(qa_info: PracticeQaInfo):
 @app.post("/mr_dialogue")
 async def multi_round_dialogue_fun(dialogue_info: DialogueInfo):
     return await multi_round_dialogue(dialogue_info)
+
+
+@app.post("/mr_dialogue_mark")
+def multi_round_dialogue_mark_fun(dialogue_mark_info: DialogueMarkInfo):
+    return multi_round_dialogue_mark(dialogue_mark_info)
 
 
 if __name__ == "__main__":

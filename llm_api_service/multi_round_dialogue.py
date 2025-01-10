@@ -1,7 +1,5 @@
 from fastapi.responses import StreamingResponse
-import ast
 import json
-from fastapi import FastAPI
 from model.llm_service import LLMService
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
@@ -28,7 +26,6 @@ update：
 #TODO 评价显示了总token数不超过50的bad case
 """
 
-app = FastAPI()
 logger = CustomLogger(name="HuiRen mr dialogue api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
@@ -42,79 +39,6 @@ class DialogueInfo(BaseModel):
     id: str
     systemPrompt: str
     history: list
-
-
-class DialogueMarkInfo(BaseModel):
-    """
-    system_prompt: "[{'role': 'system', 'content': system_prompt}]"
-    history: "[{'role': 'system', 'content': system_prompt},{'role': 'user', 'content': 'user_input'},{'role': 'assistant', 'content': 'model_response'}]
-
-    """
-    id: str
-    systemPrompt: str
-    knowledge: str
-    questionCase: str
-    standardAnswer: str
-    history: list
-
-
-class BehavioralStyleInfo(BaseModel):
-    A1: int
-    B1: int
-    A2: int
-    B2: int
-    A3: int
-    B3: int
-    A4: int
-    B4: int
-    A5: int
-    B5: int
-    A6: int
-    B6: int
-    A7: int
-    B7: int
-    A8: int
-    B8: int
-    A9: int
-    B9: int
-    A10: int
-    B10: int
-    A11: int
-    B11: int
-    A12: int
-    B12: int
-    A13: int
-    B13: int
-    A14: int
-    B14: int
-    A15: int
-    B15: int
-    A16: int
-    B16: int
-    A17: int
-    B17: int
-    A18: int
-    B18: int
-
-
-def json_formatting_repair(json_str: str):
-    """
-    1. 针对qwen,wenxin生成的回复带有 ```json``` 的case 进行修复
-    :param json_str:
-    :return:
-    """
-
-    # case1
-    try:
-
-        json_str = "{" + ''.join(json_str.split('{')[1:])
-        json_str = ''.join(json_str.split('}')[0]) + "}"
-        json_str = ast.literal_eval(json_str)
-
-        return json_str
-    except Exception as e:
-        logger.error(f"json_formatting_repair case1:  {e}")
-    return None
 
 
 def data_conversion(dialogue_info: DialogueInfo):
@@ -138,30 +62,6 @@ def data_conversion(dialogue_info: DialogueInfo):
         return []
 
 
-def get_mark_prompt(dialogue_mark_info: DialogueMarkInfo):
-    if len(dialogue_mark_info.history) < 4:
-        logger.error(f"There aren't enough rounds of dialogue, history len is {len(dialogue_mark_info.history)}")
-        return None
-    else:
-        dialogue_history = ""
-        for index, dialogue_item in enumerate(dialogue_mark_info.history):
-            if index % 2 == 0:
-                dialogue_history += f"assistant:{dialogue_item}\n"
-            else:
-                dialogue_history += f"user:{dialogue_item}\n"
-        system_prompt = dialogue_mark_info.systemPrompt if len(dialogue_mark_info.systemPrompt) > 0 else " "
-        knowledge = dialogue_mark_info.knowledge if len(dialogue_mark_info.knowledge) > 0 else " "
-        case = dialogue_mark_info.questionCase if len(dialogue_mark_info.questionCase) > 0 else " "
-        standard_answer = dialogue_mark_info.standardAnswer if len(dialogue_mark_info.standardAnswer) > 0 else " "
-
-        messages = [{'role': 'system', 'content': system_prompt},
-                    {'role': 'user',
-                     'content': f"相关学习材料如下：\n{knowledge}\n案例如下：\n{case}\n标准答案如下：\n{standard_answer} 历史对话数据如下：{dialogue_history}"}]
-
-        return messages
-
-
-@app.post("/mr_dialogue")
 async def multi_round_dialogue(dialogue_info: DialogueInfo):
     def qwen_generate() -> bytes:
         for chunk in completion:
@@ -216,78 +116,3 @@ async def multi_round_dialogue(dialogue_info: DialogueInfo):
             logger.error(f"mr dialogue error in {model_name}: {e}")
     logger.error(f"{dialogue_info.id} mr dialogue api return failed , return is error ")
     return "error"
-
-
-@app.post("/mr_dialogue_mark")
-def multi_round_dialogue_mark(dialogue_mark_info: DialogueMarkInfo):
-    logger.info("------------------start--------------------")
-
-    message = get_mark_prompt(dialogue_mark_info=dialogue_mark_info)
-    if message is not None:
-        logger.info(f"get dialogue mark message success")
-    else:
-        logger.error(
-            f"dialogue mark param error: system_prompt is {dialogue_mark_info.systemPrompt},"
-            f" history is {dialogue_mark_info.history}")
-        return "error"
-    for model_name in ['gpt-4o', 'gpt-4o-mini', 'qwen-max']:
-        try:
-            completion = llm.get_response(model_name=model_name, messages=message)
-            if completion is None:
-                continue
-            logger.info(f"{dialogue_mark_info.id} model name is {model_name} , get json result success")
-            if model_name == 'gpt-4o' or model_name == 'gpt-4o-mini':
-                response = json.loads(completion)
-                logger.info(f"result is {response}")
-                return response
-            elif model_name == 'qwen-max':
-                response = json_formatting_repair(completion)
-                logger.info(f"result is {response}")
-                return response
-        except Exception as e:
-            logger.error(f"mr dialogue mark error in {model_name}: {e}")
-    logger.error(f"{dialogue_mark_info.id} dialogue mark api return failed , return error")
-    return "error"
-
-
-def behavioral_style_score_calculate(behavioral_style_info: BehavioralStyleInfo):
-    o_score = (behavioral_style_info.A1 + behavioral_style_info.B3 + behavioral_style_info.A5 + behavioral_style_info.B7
-               + behavioral_style_info.A9 + behavioral_style_info.B11 + behavioral_style_info.A13 +
-               behavioral_style_info.B15 + behavioral_style_info.A17)
-    s_score = (behavioral_style_info.B1 + behavioral_style_info.A3 + behavioral_style_info.B5 + behavioral_style_info.A7
-               + behavioral_style_info.B9 + behavioral_style_info.A11 + behavioral_style_info.B13 +
-               behavioral_style_info.A15 + behavioral_style_info.B17)
-    d_score = (behavioral_style_info.B2 + behavioral_style_info.A4 + behavioral_style_info.B6 + behavioral_style_info.A8
-               + behavioral_style_info.B10 + behavioral_style_info.A12 + behavioral_style_info.B14 +
-               behavioral_style_info.A16 + behavioral_style_info.B18)
-    i_score = (behavioral_style_info.A2 + behavioral_style_info.B4 + behavioral_style_info.A6 + behavioral_style_info.B8
-               + behavioral_style_info.A10 + behavioral_style_info.B12 + behavioral_style_info.A14 +
-               behavioral_style_info.B16 + behavioral_style_info.A18)
-    if o_score > s_score and d_score > i_score:
-        return "社交型"
-    elif o_score > s_score and i_score > d_score:
-        return "关系型"
-    elif s_score > o_score and d_score > i_score:
-        return "指导型"
-    elif s_score > o_score and i_score > d_score:
-        return "思考型"
-    else:
-        logger.error(f"behavioral style info is {behavioral_style_info}")
-        return None
-
-
-@app.post("/behavioral_style_test")
-def behavioral_style(behavioral_style_info: BehavioralStyleInfo):
-    logger.info("------------------start--------------------")
-    logger.info(behavioral_style_info)
-    try:
-        result = behavioral_style_score_calculate(behavioral_style_info)
-        if result is not None:
-            logger.info(f"behavioral style test result is {result}")
-            return {"result": result}
-        else:
-            logger.error(f"behavioral style test score calculate error, calculate fun return None")
-            return "error"
-    except Exception as e:
-        logger.error(f"behavioral_style error: {e}")
-        return "error"
