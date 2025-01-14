@@ -5,6 +5,7 @@ from llm_api_service.exam_marking import exam_mark, ExamQaInfo
 from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
 from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
 from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
+from llm_api_service.qa_generation import qa_generation, KnowLedgePoint
 
 app = FastAPI()
 
@@ -49,6 +50,12 @@ async def multi_round_dialogue_fun(dialogue_info: DialogueInfo):
 @app.post("/mr_dialogue_mark")
 def multi_round_dialogue_mark_fun(dialogue_mark_info: DialogueMarkInfo):
     return multi_round_dialogue_mark(dialogue_mark_info)
+
+
+@app.post("/qa_generation")
+def qa_generation_fun(knowledge_point: KnowLedgePoint):
+    qa_res = qa_generation(knowledge_point)
+    return qa_res
 
 
 if __name__ == "__main__":

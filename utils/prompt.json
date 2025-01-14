@@ -1,0 +1,9 @@
+{
+  "qa_generation": {
+    "tag_generation": "给以下知识总结归纳出特征标签，要求如下: 1. 本次生成的特征标签的数量为[tag_num]个 2.每个标签最长8个字，最短2个字 3.不能有重复的标签 4.这些特征标签后续会用于出题目，来代表每个题目的知识点，因此每个标签应具有代表性，并且标签集合应尽量覆盖这些知识的所有知识点 5.返回的格式为json格式，示例：{'result':['标签1','标签2','标签3']}"
+  },
+  "practice_stream": "",
+  "exam_marking": "",
+  "multi_round_dialogue": "",
+  "multi_round_dialogue_mark": ""
+}
