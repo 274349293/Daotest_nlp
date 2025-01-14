@@ -13,6 +13,7 @@ class KnowLedgePoint(BaseModel):
     QuestionNum: str
     TagNum: str
     QuestionType: str  # 1,2,3 填空，选择，问答
+    AdditionalPrompt: str
 
 
 class DataHelper:
@@ -27,12 +28,14 @@ class DataHelper:
 
     @staticmethod
     def get_messages(task_name, model_name, system_prompt, knowledge_point, tags_list):
+
         if task_name == "tag_generation":
             system_prompt = system_prompt.replace('[tag_num]', knowledge_point.TagNum)
             prompt = f"生成特征标签的参考内容如下：\n{knowledge_point.KnowledgePoint}"
-        elif task_name == "choice_question_generation" or "short_answer_question_generation":
+        elif task_name == "choice_question_generation" or "short_answer_question_generation" or "fib_generation":
             system_prompt = system_prompt.replace('[question_num]', knowledge_point.QuestionNum)
-            prompt = f"本次学习材料的关键词list为：{tags_list}，\n\n 本次学习内容如下：\n{knowledge_point.KnowledgePoint}"
+            additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{knowledge_point.AdditionalPrompt} \n"
+            prompt = additional_prompt + f"本次学习材料的关键词list为：{tags_list}，\n\n 本次学习内容如下：\n{knowledge_point.KnowledgePoint}"
         else:
             # TODO
             pass
@@ -56,11 +59,19 @@ def qa_generation(knowledge_point: KnowLedgePoint):
                                                 system_prompt=tag_prompt,
                                                 knowledge_point=knowledge_point, tags_list=tags_list)
         tags_list = json.loads(llm.get_response(model_name=model_name, messages=tag_messages))["result"]
+
         qa_prompt = prompt['qa_generation'][data_helper.question_type_map[knowledge_point.QuestionType]]
         qa_messages = data_helper.get_messages(task_name="choice_question_generation",
                                                model_name=model_name, system_prompt=qa_prompt,
                                                knowledge_point=knowledge_point, tags_list=tags_list)
 
         qa_res = llm.get_response(model_name=model_name, messages=qa_messages)
-        print(qa_res)
+
+        # test in files
+        result = []
+        import pandas as pd
+        for item in json.loads(qa_res)["result"]:
+            result.append([item["题目类型"], item["题目"], item["答案"], item["题目标签"]])
+        df = pd.DataFrame(result, columns=['题目类型', '题目', '标准答案', '题目标签'])
+        df.to_excel(f'./data/{knowledge_point.id}.xlsx')
         return qa_res
