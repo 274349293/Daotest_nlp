@@ -16,6 +16,7 @@ app = FastAPI()
 3. exam_mark 通用考试评价接口(简答题和阅读理解题)
 4. practice_stream 练习评价接口，流式返回
 5. mr_dialogue 案例分析题接口，课后互动题-多轮对话 
+6. qa_generation 题目生成接口
 """
 
 
