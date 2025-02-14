@@ -11,8 +11,9 @@ class KnowLedgePoint(BaseModel):
     id: str
     KnowledgePoint: str
     QuestionNum: str
+    TagList: list[str]
     TagNum: str
-    QuestionType: str  # 1,2,3 填空，选择，问答
+    QuestionType: str  # 1,2,3 选择，填空，问答
     AdditionalPrompt: str
 
 
@@ -31,6 +32,8 @@ class DataHelper:
 
         if task_name == "tag_generation":
             system_prompt = system_prompt.replace('[tag_num]', knowledge_point.TagNum)
+            if len(tags_list):
+                system_prompt = system_prompt + f"这个list是人工为这段知识写的标签：{knowledge_point.TagList}，请参考这些标签的内容和形式来生成。"
             prompt = f"生成特征标签的参考内容如下：\n{knowledge_point.KnowledgePoint}"
         elif task_name == "choice_question_generation" or "short_answer_question_generation" or "fib_generation":
             system_prompt = system_prompt.replace('[question_num]', knowledge_point.QuestionNum)
@@ -52,14 +55,13 @@ class DataHelper:
 def qa_generation(knowledge_point: KnowLedgePoint):
     data_helper = DataHelper()
     prompt = data_helper.prompt
-    tags_list = None
+    tags_list = knowledge_point.TagList
     for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
         tag_prompt = prompt['qa_generation']['tag_generation']
         tag_messages = data_helper.get_messages(task_name="tag_generation", model_name=model_name,
                                                 system_prompt=tag_prompt,
                                                 knowledge_point=knowledge_point, tags_list=tags_list)
-        tags_list = json.loads(llm.get_response(model_name=model_name, messages=tag_messages))["result"]
-
+        tags_list = tags_list + json.loads(llm.get_response(model_name=model_name, messages=tag_messages))["result"]
         qa_prompt = prompt['qa_generation'][data_helper.question_type_map[knowledge_point.QuestionType]]
         qa_messages = data_helper.get_messages(task_name="choice_question_generation",
                                                model_name=model_name, system_prompt=qa_prompt,
