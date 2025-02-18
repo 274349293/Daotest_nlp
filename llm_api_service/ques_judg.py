@@ -154,7 +154,7 @@ def json_formatting_repair(json_str: str):
 
 def choice_question_judgment(options: str, standardAnswer: str):
     try:
-        if len(options) > 4 or len(options) < 1:
+        if len(options) > 6 or len(options) < 1:
             logger.error(f"choice question options len > 4 or <1, options: {options}")
             return 0
         for option in options:
