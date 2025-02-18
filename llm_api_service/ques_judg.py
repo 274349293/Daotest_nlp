@@ -42,7 +42,8 @@ system_prompt = """汇仁是一家大型医药企业集团，汇仁公司新招�
 """
 llm = LLMService(llm_logger=logger)
 # app = FastAPI()
-choice_question_map = {'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D', 'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd'}
+choice_question_map = {'a': 'A', 'b': 'B', 'c': 'C', 'd': 'D', 'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'e': 'E',
+                       'E': 'e', 'f': 'F', 'F': 'f'}
 
 fb_question_map = {
     # 小写字母转大写
