@@ -1,46 +1,78 @@
 from model.llm_service import LLMService
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from utils.nlp_logging import CustomLogger
 import json
+from typing import List, Optional
 
 logger = CustomLogger(name="HuiRen qa generation api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 
-class KnowLedgePoint(BaseModel):
+class ChoiceQuestion(BaseModel):
+    questionNum: int
+    additionalPrompt: str
+
+
+class FillInTheBlankQuestion(BaseModel):
+    questionNum: int
+    additionalPrompt: str
+
+
+class ShortAnswerQuestion(BaseModel):
+    questionNum: int
+    additionalPrompt: str
+
+
+class ReadingComprehensionQuestion(BaseModel):
+    questionNum: int
+    passage: str
+    additionalPrompt: str
+
+
+class CaseAnalysisQuestion(BaseModel):
+    questionNum: int
+    passage: str
+    additionalPrompt: str
+
+
+class QaGeneration(BaseModel):
     id: str
-    KnowledgePoint: str
-    QuestionNum: str
-    TagList: list[str]
-    TagNum: str
-    QuestionType: str  # 1,2,3 选择，填空，问答
-    AdditionalPrompt: str
+    knowledgeTitle: str
+    knowledgePoint: str
+    tagList: List[str] = Field(..., alias="tagList")  # 处理小写字段名
+    choiceQuestion: Optional[ChoiceQuestion] = None
+    fillInTheBlankQuestion: Optional[FillInTheBlankQuestion] = None
+    shortAnswerQuestion: Optional[ShortAnswerQuestion] = None
+    readingComprehensionQuestion: Optional[ReadingComprehensionQuestion] = None
+    caseAnalysisQuestion: Optional[CaseAnalysisQuestion] = None
 
 
 class DataHelper:
     def __init__(self):
         self.prompt = self.get_prompt()
-        self.question_type_map = {"1": "choice_question_generation", "2": "fib_generation",
-                                  "3": "short_answer_question_generation"}
 
-    def get_prompt(self):
+    @staticmethod
+    def get_prompt():
         with open('./utils/prompt.json', encoding='utf-8') as config_file:
             return json.load(config_file)
 
     @staticmethod
-    def get_messages(task_name, model_name, system_prompt, knowledge_point, tags_list):
+    def get_messages(task_name, model_name, system_prompt, qa_gen):
 
-        if task_name == "tag_generation":
-            system_prompt = system_prompt.replace('[tag_num]', knowledge_point.TagNum)
-            if len(tags_list):
-                system_prompt = system_prompt + f"这个list是人工为这段知识写的标签：{knowledge_point.TagList}，请参考这些标签的内容和形式来生成。"
-            prompt = f"生成特征标签的参考内容如下：\n{knowledge_point.KnowledgePoint}"
-        elif task_name == "choice_question_generation" or "short_answer_question_generation" or "fib_generation":
-            system_prompt = system_prompt.replace('[question_num]', knowledge_point.QuestionNum)
-            additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{knowledge_point.AdditionalPrompt} \n"
-            prompt = additional_prompt + f"本次学习材料的关键词list为：{tags_list}，\n\n 本次学习内容如下：\n{knowledge_point.KnowledgePoint}"
+        if task_name == "choice_question_generation":
+            system_prompt = system_prompt.replace('[question_num]', str(qa_gen.choiceQuestion.questionNum))
+            additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{qa_gen.choiceQuestion.additionalPrompt} \n"
+            prompt = additional_prompt + f"本次学习材料的关键词list为：{str(qa_gen.tagList)}，\n\n 本次学习内容如下：\n{qa_gen.knowledgePoint}"
+        elif task_name == "short_answer_question_generation":
+            system_prompt = system_prompt.replace('[question_num]', str(qa_gen.shortAnswerQuestion.questionNum))
+            additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{qa_gen.shortAnswerQuestion.additionalPrompt} \n"
+            prompt = additional_prompt + f"本次学习材料的关键词list为：{str(qa_gen.tagList)}，\n\n 本次学习内容如下：\n{qa_gen.knowledgePoint}"
+        elif task_name == "fib_generation":
+            system_prompt = system_prompt.replace('[question_num]', str(qa_gen.fillInTheBlankQuestion.questionNum))
+            additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{qa_gen.fillInTheBlankQuestion.additionalPrompt} \n"
+            prompt = additional_prompt + f"本次学习材料的关键词list为：{str(qa_gen.tagList)}，\n\n 本次学习内容如下：\n{qa_gen.knowledgePoint}"
         else:
-            # TODO
+            # ReadingComprehensionQuestion and CaseAnalysisQuestion
             pass
 
         if model_name != 'ERNIE-4.0-8K':
@@ -52,28 +84,95 @@ class DataHelper:
         return messages
 
 
-def qa_generation(knowledge_point: KnowLedgePoint):
+def choice_question_generation(data_helper, qa_gen):
+    choice_question_res = {"status": 0, "result": []}
+    if qa_gen.choiceQuestion.questionNum == 0:
+        return None
+    else:
+        try:
+            prompt = data_helper.prompt
+            for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+                choice_question_prompt = prompt['qa_generation']['choice_question_generation']
+                choice_question_messages = data_helper.get_messages(task_name="choice_question_generation",
+                                                                    model_name=model_name,
+                                                                    system_prompt=choice_question_prompt,
+                                                                    qa_gen=qa_gen)
+
+                choice_question_res["result"] = json.loads(
+                    llm.get_response(model_name=model_name, messages=choice_question_messages))["result"]
+                if qa_gen.choiceQuestion.questionNum != len(choice_question_res['result']):
+                    logger.warning(
+                        f"The number of choice questions generated is {len(choice_question_res['result'])}"
+                        f" != parameters choiceQuestion.questionNum {qa_gen.choiceQuestion.questionNum}")
+                    if len(choice_question_res['result']) > qa_gen.choiceQuestion.questionNum:
+                        choice_question_res["result"] = choice_question_res['result'][
+                                                        :qa_gen.choiceQuestion.questionNum]
+                    else:
+                        choice_question_res["result"] = (choice_question_res["result"] + json.loads(
+                            llm.get_response(model_name=model_name, messages=choice_question_messages))["result"])[
+                                                        :qa_gen.choiceQuestion.questionNum]
+                logger.info(
+                    f"choice question result were generated successfully, The number of generated is {qa_gen.choiceQuestion.questionNum}, model name is {model_name}")
+                choice_question_res["status"] = 1
+                return choice_question_res
+        except Exception as e:
+            logger.error(e)
+            return choice_question_res
+
+
+def short_answer_question_generation(data_helper, qa_gen):
+    short_answer_question_res = {"status": 0, "result": []}
+    if qa_gen.shortAnswerQuestion.questionNum == 0:
+        return None
+    else:
+        try:
+            prompt = data_helper.prompt
+            for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+                short_answer_question_prompt = prompt['qa_generation']['short_answer_question_generation']
+                short_answer_question_messages = data_helper.get_messages(task_name="short_answer_question_generation",
+                                                                          model_name=model_name,
+                                                                          system_prompt=short_answer_question_prompt,
+                                                                          qa_gen=qa_gen)
+
+                short_answer_question_res["result"] = json.loads(
+                    llm.get_response(model_name=model_name, messages=short_answer_question_messages))["result"]
+                if qa_gen.shortAnswerQuestion.questionNum != len(short_answer_question_res['result']):
+                    logger.warning(
+                        f"The number of short answer question questions generated is {len(short_answer_question_res['result'])}"
+                        f" != parameters short_answer_question.questionNum {qa_gen.shortAnswerQuestion.questionNum}")
+                    if len(short_answer_question_res['result']) > qa_gen.shortAnswerQuestion.questionNum:
+                        short_answer_question_res["result"] = short_answer_question_res['result'][
+                                                              :qa_gen.shortAnswerQuestion.questionNum]
+                    else:
+                        short_answer_question_res["result"] = (short_answer_question_res["result"] + json.loads(
+                            llm.get_response(model_name=model_name, messages=short_answer_question_res))["result"])[
+                                                              :qa_gen.shortAnswerQuestion.questionNum]
+                logger.info(
+                    f"short answer question result were generated successfully, The number of generated is {qa_gen.shortAnswerQuestion.questionNum}, model name is {model_name}")
+                short_answer_question_res["status"] = 1
+                return short_answer_question_res
+        except Exception as e:
+            logger.error(e)
+            return short_answer_question_res
+
+
+def qa_merging(choice_question_res, short_answer_question_res):
+    result = {}
+    if choice_question_res is not None:
+        result["choiceQuestion"] = choice_question_res
+
+    if short_answer_question_res is not None:
+        result["shortAnswerQuestion"] = short_answer_question_res
+
+    return result
+
+
+def qa_generation(qa_gen: QaGeneration):
     data_helper = DataHelper()
-    prompt = data_helper.prompt
-    tags_list = knowledge_point.TagList
-    for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
-        tag_prompt = prompt['qa_generation']['tag_generation']
-        tag_messages = data_helper.get_messages(task_name="tag_generation", model_name=model_name,
-                                                system_prompt=tag_prompt,
-                                                knowledge_point=knowledge_point, tags_list=tags_list)
-        tags_list = tags_list + json.loads(llm.get_response(model_name=model_name, messages=tag_messages))["result"]
-        qa_prompt = prompt['qa_generation'][data_helper.question_type_map[knowledge_point.QuestionType]]
-        qa_messages = data_helper.get_messages(task_name="choice_question_generation",
-                                               model_name=model_name, system_prompt=qa_prompt,
-                                               knowledge_point=knowledge_point, tags_list=tags_list)
 
-        qa_res = llm.get_response(model_name=model_name, messages=qa_messages)
+    choice_question_res = choice_question_generation(data_helper, qa_gen)
 
-        # test in files
-        result = []
-        import pandas as pd
-        for item in json.loads(qa_res)["result"]:
-            result.append([item["题目类型"], item["题目"], item["答案"], item["题目标签"]])
-        df = pd.DataFrame(result, columns=['题目类型', '题目', '标准答案', '题目标签'])
-        df.to_excel(f'./data/{knowledge_point.id}.xlsx')
-        return qa_res
+    short_answer_question_res = short_answer_question_generation(data_helper, qa_gen)
+
+    result = qa_merging(choice_question_res, short_answer_question_res)
+    return result
