@@ -5,6 +5,7 @@ from llm_api_service.exam_marking import exam_mark, ExamQaInfo
 from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
 from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
 from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
+from llm_api_service.tag_generation import tag_generation, TagSet
 from llm_api_service.qa_generation import qa_generation, KnowLedgePoint
 
 app = FastAPI()
@@ -16,7 +17,8 @@ app = FastAPI()
 3. exam_mark 通用考试评价接口(简答题和阅读理解题)
 4. practice_stream 练习评价接口，流式返回
 5. mr_dialogue 案例分析题接口，课后互动题-多轮对话 
-6. qa_generation 题目生成接口
+6. tag_generation 标签生成接口
+7. qa_generation 题目生成接口
 """
 
 
@@ -51,6 +53,12 @@ async def multi_round_dialogue_fun(dialogue_info: DialogueInfo):
 @app.post("/mr_dialogue_mark")
 def multi_round_dialogue_mark_fun(dialogue_mark_info: DialogueMarkInfo):
     return multi_round_dialogue_mark(dialogue_mark_info)
+
+
+@app.post("/tag_generation")
+def tag_generation_fun(tag_set: TagSet):
+    qa_res = tag_generation(tag_set)
+    return qa_res
 
 
 @app.post("/qa_generation")
