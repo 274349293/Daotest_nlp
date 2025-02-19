@@ -138,7 +138,7 @@ def short_answer_question_generation(data_helper, qa_gen):
                     llm.get_response(model_name=model_name, messages=short_answer_question_messages))["result"]
                 if qa_gen.shortAnswerQuestion.questionNum != len(short_answer_question_res['result']):
                     logger.warning(
-                        f"The number of short answer question questions generated is {len(short_answer_question_res['result'])}"
+                        f"The number of short answer questions generated is {len(short_answer_question_res['result'])}"
                         f" != parameters short_answer_question.questionNum {qa_gen.shortAnswerQuestion.questionNum}")
                     if len(short_answer_question_res['result']) > qa_gen.shortAnswerQuestion.questionNum:
                         short_answer_question_res["result"] = short_answer_question_res['result'][
@@ -156,11 +156,48 @@ def short_answer_question_generation(data_helper, qa_gen):
             return short_answer_question_res
 
 
-def qa_merging(choice_question_res, short_answer_question_res):
+def fib_question_generation(data_helper, qa_gen):
+    fib_question_res = {"status": 0, "result": []}
+    if qa_gen.fillInTheBlankQuestion.questionNum == 0:
+        return None
+    else:
+        try:
+            prompt = data_helper.prompt
+            for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+                fib_question_prompt = prompt['qa_generation']['fib_generation']
+                fib_question_messages = data_helper.get_messages(task_name="fib_generation",
+                                                                 model_name=model_name,
+                                                                 system_prompt=fib_question_prompt,
+                                                                 qa_gen=qa_gen)
+
+                fib_question_res["result"] = json.loads(
+                    llm.get_response(model_name=model_name, messages=fib_question_messages))["result"]
+                if qa_gen.fillInTheBlankQuestion.questionNum != len(fib_question_res['result']):
+                    logger.warning(
+                        f"The number of fib questions generated is {len(fib_question_res['result'])}"
+                        f" != parameters fib_question.questionNum {qa_gen.fillInTheBlankQuestion.questionNum}")
+                    if len(fib_question_res['result']) > qa_gen.fillInTheBlankQuestion.questionNum:
+                        fib_question_res["result"] = fib_question_res['result'][
+                                                     :qa_gen.fillInTheBlankQuestion.questionNum]
+                    else:
+                        fib_question_res["result"] = (fib_question_res["result"] + json.loads(
+                            llm.get_response(model_name=model_name, messages=fib_question_res))["result"])[
+                                                     :qa_gen.fillInTheBlankQuestion.questionNum]
+                logger.info(
+                    f"fib question result were generated successfully, The number of generated is {qa_gen.fillInTheBlankQuestion.questionNum}, model name is {model_name}")
+                fib_question_res["status"] = 1
+                return fib_question_res
+        except Exception as e:
+            logger.error(e)
+            return fib_question_res
+
+
+def qa_merging(choice_question_res, fib_question_res, short_answer_question_res):
     result = {}
     if choice_question_res is not None:
         result["choiceQuestion"] = choice_question_res
-
+    if fib_question_res is not None:
+        result["fibQuestion"] = fib_question_res
     if short_answer_question_res is not None:
         result["shortAnswerQuestion"] = short_answer_question_res
 
@@ -172,7 +209,9 @@ def qa_generation(qa_gen: QaGeneration):
 
     choice_question_res = choice_question_generation(data_helper, qa_gen)
 
+    fib_question_res = fib_question_generation(data_helper, qa_gen)
+
     short_answer_question_res = short_answer_question_generation(data_helper, qa_gen)
 
-    result = qa_merging(choice_question_res, short_answer_question_res)
+    result = qa_merging(choice_question_res, fib_question_res, short_answer_question_res)
     return result
