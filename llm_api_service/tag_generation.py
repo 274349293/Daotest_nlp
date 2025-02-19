@@ -9,9 +9,9 @@ llm = LLMService(llm_logger=logger)
 
 class TagSet(BaseModel):
     id: str
-    KnowledgePoint: str
-    TagList: list[str]
-    TagNum: str
+    knowledgePoint: str
+    tagList: list[str]
+    tagNum: str
 
 
 class DataHelper:
@@ -26,10 +26,10 @@ class DataHelper:
     @staticmethod
     def get_messages(model_name, system_prompt, tag_set, tags_list):
 
-        system_prompt = system_prompt.replace('[tag_num]', tag_set.TagNum)
+        system_prompt = system_prompt.replace('[tag_num]', tag_set.tagNum)
         if len(tags_list):
-            system_prompt = system_prompt + f"这个list是人工为这段知识写的标签：{tag_set.TagList}，请参考这些标签的内容和形式来生成。"
-        prompt = f"生成特征标签的参考内容如下：\n{tag_set.KnowledgePoint}"
+            system_prompt = system_prompt + f"这个list是人工为这段知识写的标签：{tag_set.tagList}，请参考这些标签的内容和形式来生成。"
+        prompt = f"生成特征标签的参考内容如下：\n{tag_set.knowledgePoint}"
 
         if model_name != 'ERNIE-4.0-8K':
             messages = [{'role': 'system', 'content': system_prompt},
@@ -46,7 +46,7 @@ def tag_generation(tag_set: TagSet):
     try:
         data_helper = DataHelper()
         prompt = data_helper.prompt
-        tags_list = tag_set.TagList
+        tags_list = tag_set.tagList
         for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
             tag_prompt = prompt['qa_generation']['tag_generation']
             tag_messages = data_helper.get_messages(model_name=model_name,
