@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from concurrent.futures import ThreadPoolExecutor
 from llm_api_service.ques_judg import ques_judgment, QjInfo
 from llm_api_service.behavioral_style_test import behavioral_style, BehavioralStyleInfo
 from llm_api_service.exam_marking import exam_mark, ExamQaInfo
@@ -62,7 +63,7 @@ def tag_generation_fun(tag_set: TagSet):
 
 
 @app.post("/qa_generation")
-def qa_generation_fun(qa_gen: QaGeneration):
+async def qa_generation_fun(qa_gen: QaGeneration):
     qa_res = qa_generation(qa_gen)
     return qa_res
 

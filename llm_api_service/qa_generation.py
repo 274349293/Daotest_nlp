@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 from utils.nlp_logging import CustomLogger
 import json
 from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 
 logger = CustomLogger(name="HuiRen qa generation api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
@@ -287,32 +289,75 @@ def case_analysis_question_generation(data_helper, qa_gen):
             return case_analysis_question_res
 
 
-def qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res, reading_comprehension_question,
-                    case_analysis_question):
-    result = {}
-    if choice_question_res is not None:
-        result["choiceQuestion"] = choice_question_res
-    if fib_question_res is not None:
-        result["fibQuestion"] = fib_question_res
-    if short_answer_question_res is not None:
-        result["shortAnswerQuestion"] = short_answer_question_res
-    if reading_comprehension_question is not None:
-        result["readingComprehensionQuestion"] = reading_comprehension_question
-    if case_analysis_question is not None:
-        result["caseAnalysisQuestion"] = case_analysis_question
+def qa_type_merging(futures):
+    result = {
+        "choiceQuestion": {
+            "status": 0,
+            "result": []
+        },
+        "fillInTheBlankQuestion": {
+            "status": 0,
+            "result": []
+        },
+        "shortAnswerQuestion": {
+            "status": 0,
+            "result": []
+        },
+        "readingComprehensionQuestion": {
+            "status": 0,
+            "result": []
+        },
+        "caseAnalysisQuestion": {
+            "status": 0,
+            "result": []
+        }
+    }
+    for future_item in as_completed(futures):
+        future_res = future_item.result()
+        if future_res is not None and future_res["status"] == 1:
+            if type(future_res["result"][0]) is dict:
+                if future_res["result"][0]['type'] == "填空题":
+                    result["fillInTheBlankQuestion"] = future_res
+                elif future_res["result"][0]['type'] == "简答题":
+                    result["shortAnswerQuestion"] = future_res
+                else:
+                    result["choiceQuestion"] = future_res
+            elif type(future_res["result"][0]) is list:
+                result["readingComprehensionQuestion"] = future_res
+            elif type(future_res["result"][0]) is str:
+                result["caseAnalysisQuestion"] = future_res
+            else:
+                logger.error(f"futures result error ,res item is {future_res}")
+                continue
+        else:
+            logger.error(f"futures result error ,res item is {future_res}")
+            continue
     return result
+
+
+def send_callback(callback_url, results):
+    """将结果通过 HTTP 回调发送给前端"""
+    try:
+        response = requests.post(callback_url, json=results)
+        if response.status_code == 200:
+            print("Callback sent successfully!")
+        else:
+            print(f"Callback failed with status code {response.status_code}")
+    except Exception as e:
+        print(f"Error sending callback: {e}")
 
 
 def qa_generation(qa_gen: QaGeneration):
     data_helper = DataHelper()
+    futures = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures.append(executor.submit(choice_question_generation, data_helper, qa_gen))
+        futures.append(executor.submit(fib_question_generation, data_helper, qa_gen))
+        futures.append(executor.submit(short_answer_question_generation, data_helper, qa_gen))
+        futures.append(executor.submit(reading_comprehension_question_generation, data_helper, qa_gen))
+        futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
-    choice_question_res = choice_question_generation(data_helper, qa_gen)
-    fib_question_res = fib_question_generation(data_helper, qa_gen)
-    short_answer_question_res = short_answer_question_generation(data_helper, qa_gen)
-    reading_comprehension_question = reading_comprehension_question_generation(data_helper, qa_gen)
-    case_analysis_question = case_analysis_question_generation(data_helper, qa_gen)
-
-    result = qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res,
-                             reading_comprehension_question, case_analysis_question)
+    result = qa_type_merging(futures)
 
     return result
+    # return result
