@@ -335,16 +335,15 @@ def qa_type_merging(futures):
     return result
 
 
-def send_callback(callback_url, results):
-    """将结果通过 HTTP 回调发送给前端"""
+def send_result_to_frontend(callback_url: str, result: dict):
     try:
-        response = requests.post(callback_url, json=results)
+        response = requests.post(callback_url, json=result)
         if response.status_code == 200:
-            print("Callback sent successfully!")
+            logger.info("Callback sent successfully!")
         else:
-            print(f"Callback failed with status code {response.status_code}")
+            logger.error(f"Callback failed with status code {response.status_code}")
     except Exception as e:
-        print(f"Error sending callback: {e}")
+        logger.error(f"Error sending callback: {e}")
 
 
 def qa_generation(qa_gen: QaGeneration):
@@ -358,6 +357,15 @@ def qa_generation(qa_gen: QaGeneration):
         futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
     result = qa_type_merging(futures)
-
     return result
-    # return result
+
+
+def process_qa_generation(qa_gen: QaGeneration, task_id: str):
+    callback_url = "前端的回调地址"
+    try:
+        result = qa_generation(qa_gen)
+        # 需要设置前端的回调地址
+        send_result_to_frontend(callback_url, result)
+
+    except Exception as e:
+        logger.error(f"callback url{callback_url} error : {e}")
