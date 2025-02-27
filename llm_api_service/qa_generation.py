@@ -226,21 +226,22 @@ def reading_comprehension_question_generation(data_helper, qa_gen):
                     json.loads(
                         llm.get_response(model_name=model_name, messages=reading_comprehension_question_messages))[
                         "result"]
-                if qa_gen.readingComprehensionQuestion.questionNum != len(reading_comprehension_question_res['result']):
+                if qa_gen.readingComprehensionQuestion.questionNum * 3 != len(
+                        reading_comprehension_question_res['result']):
                     logger.warning(
                         f"The reading comprehension question generated is {len(reading_comprehension_question_res['result'])}"
                         f" != parameters readingComprehensionQuestion.questionNum {qa_gen.readingComprehensionQuestion.questionNum}")
                     if len(reading_comprehension_question_res[
-                               'result']) > qa_gen.readingComprehensionQuestion.questionNum:
+                               'result']) > qa_gen.readingComprehensionQuestion.questionNum * 3:
                         reading_comprehension_question_res["result"] = reading_comprehension_question_res['result'][
-                                                                       :qa_gen.readingComprehensionQuestion.questionNum]
+                                                                       :qa_gen.readingComprehensionQuestion.questionNum * 3]
                     else:
                         reading_comprehension_question_res["result"] = (reading_comprehension_question_res["result"] +
                                                                         json.loads(
                                                                             llm.get_response(model_name=model_name,
                                                                                              messages=reading_comprehension_question_res))[
                                                                             "result"])[
-                                                                       :qa_gen.readingComprehensionQuestion.questionNum]
+                                                                       :qa_gen.readingComprehensionQuestion.questionNum * 3]
                 logger.info(
                     f"reading comprehension question result were generated successfully, The number of generated is {qa_gen.readingComprehensionQuestion.questionNum}, model name is {model_name}")
                 reading_comprehension_question_res["status"] = 1
@@ -250,7 +251,44 @@ def reading_comprehension_question_generation(data_helper, qa_gen):
             return reading_comprehension_question_res
 
 
-def qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res):
+def case_analysis_question_generation(data_helper, qa_gen):
+    case_analysis_question_res = {"status": 0, "result": []}
+    if qa_gen.caseAnalysisQuestion.questionNum == 0:
+        return None
+    else:
+        try:
+            prompt = data_helper.prompt
+            for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+                case_analysis_question_prompt = prompt['qa_generation'][
+                    'case_analysis_question_generation']
+                case_analysis_question_messages = data_helper.get_messages(
+                    task_name="case_analysis_question_generation",
+                    model_name=model_name,
+                    system_prompt=case_analysis_question_prompt,
+                    qa_gen=qa_gen)
+
+                case_analysis_question_res["result"] = \
+                    json.loads(llm.get_response(model_name=model_name, messages=case_analysis_question_messages))[
+                        "result"]
+                if qa_gen.caseAnalysisQuestion.questionNum * 4 != len(case_analysis_question_res['result']):
+                    # 对案例分析的题目数量进行判断
+                    logger.error(
+                        f"The case analysis question generated is {case_analysis_question_res['result']}"
+                        f" != parameters caseAnalysisQuestion.questionNum {qa_gen.caseAnalysisQuestion.questionNum}")
+                    case_analysis_question_res["status"] = 0
+                    return {"status": 0, "result": []}
+                else:
+                    logger.info(
+                        f"case analysis  question result were generated successfully, The number of generated is {qa_gen.caseAnalysisQuestion.questionNum}, model name is {model_name}")
+                    case_analysis_question_res["status"] = 1
+                    return case_analysis_question_res
+        except Exception as e:
+            logger.error(e)
+            return case_analysis_question_res
+
+
+def qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res, reading_comprehension_question,
+                    case_analysis_question):
     result = {}
     if choice_question_res is not None:
         result["choiceQuestion"] = choice_question_res
@@ -258,7 +296,10 @@ def qa_type_merging(choice_question_res, fib_question_res, short_answer_question
         result["fibQuestion"] = fib_question_res
     if short_answer_question_res is not None:
         result["shortAnswerQuestion"] = short_answer_question_res
-
+    if reading_comprehension_question is not None:
+        result["readingComprehensionQuestion"] = reading_comprehension_question
+    if case_analysis_question is not None:
+        result["caseAnalysisQuestion"] = case_analysis_question
     return result
 
 
@@ -266,21 +307,12 @@ def qa_generation(qa_gen: QaGeneration):
     data_helper = DataHelper()
 
     choice_question_res = choice_question_generation(data_helper, qa_gen)
-
     fib_question_res = fib_question_generation(data_helper, qa_gen)
-
     short_answer_question_res = short_answer_question_generation(data_helper, qa_gen)
-
     reading_comprehension_question = reading_comprehension_question_generation(data_helper, qa_gen)
+    case_analysis_question = case_analysis_question_generation(data_helper, qa_gen)
 
-    result = qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res)
-
-    result_df = []
-    import pandas as pd
-    for type in result:
-        for item in result[type]["result"]:
-            result_df.append([item["type"], item["question"], item["answer"], item["tag"], item["knowledgePoint"]])
-    df = pd.DataFrame(result_df, columns=['题目类型', '题目', '标准答案', '题目标签', '出题知识点'])
-    df.to_excel(f'./data/{qa_gen.id}.xlsx')
+    result = qa_type_merging(choice_question_res, fib_question_res, short_answer_question_res,
+                             reading_comprehension_question, case_analysis_question)
 
     return result
