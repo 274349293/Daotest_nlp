@@ -1,2 +1,3 @@
 /data/
 /utils/log/
+/llm_api_service/__pycache__/
