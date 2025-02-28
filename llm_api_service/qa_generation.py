@@ -337,7 +337,7 @@ def qa_type_merging(futures):
 
 def send_result_to_frontend(callback_url: str, result: dict):
     try:
-        response = requests.post(callback_url, json=result)
+        response = requests.post(callback_url, json=result, headers={"Content-Type": "application/json"})
         if response.status_code == 200:
             logger.info("Callback sent successfully!")
         else:
@@ -360,8 +360,8 @@ def qa_generation(qa_gen: QaGeneration):
     return result
 
 
-def process_qa_generation(qa_gen: QaGeneration, task_id: str):
-    callback_url = "前端的回调地址"
+def process_qa_generation(qa_gen: QaGeneration):
+    callback_url = "http://v87fgt.natappfree.cc/jeecg-boot/course/question/generateQuestionsCallBack"
     try:
         result = qa_generation(qa_gen)
         # 需要设置前端的回调地址

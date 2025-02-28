@@ -6,7 +6,7 @@ from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
 from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
 from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
 from llm_api_service.tag_generation import tag_generation, TagSet
-from llm_api_service.qa_generation import qa_generation, QaGeneration
+from llm_api_service.qa_generation import process_qa_generation, QaGeneration
 
 app = FastAPI()
 
@@ -62,9 +62,8 @@ def tag_generation_fun(tag_set: TagSet):
 
 
 @app.post("/qa_generation")
-async def qa_generation_fun(qa_gen: QaGeneration):
-    qa_res = qa_generation(qa_gen)
-    background_tasks.add_task(process_qa_generation, qa_gen, task_id)
+async def qa_generation_fun(qa_gen: QaGeneration, background_tasks: BackgroundTasks):
+    background_tasks.add_task(process_qa_generation, qa_gen)
     return {"status": 1}
 
 
