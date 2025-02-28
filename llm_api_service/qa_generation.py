@@ -357,6 +357,7 @@ def qa_generation(qa_gen: QaGeneration):
         futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
     result = qa_type_merging(futures)
+    result["id"] = qa_gen.id
     return result
 
 
