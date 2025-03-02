@@ -330,7 +330,7 @@ def qa_type_merging(futures):
                 logger.error(f"futures result error ,res item is {future_res}")
                 continue
         else:
-            logger.error(f"futures result error ,res item is {future_res}")
+            logger.warning(f"futures result error ,res item is {future_res}")
             continue
     return result
 
@@ -362,9 +362,10 @@ def qa_generation(qa_gen: QaGeneration):
 
 
 def process_qa_generation(qa_gen: QaGeneration):
-    callback_url = "http://v87fgt.natappfree.cc/jeecg-boot/course/question/generateQuestionsCallBack"
+    callback_url = "http://127.0.0.1:8080/jeecg-boot/course/question/generateQuestionsCallBack"
     try:
         result = qa_generation(qa_gen)
+        print(result)
         # 需要设置前端的回调地址
         send_result_to_frontend(callback_url, result)
 
