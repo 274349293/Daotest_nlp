@@ -26,7 +26,7 @@ update：
 #TODO 评价显示了总token数不超过50的bad case
 """
 
-logger = CustomLogger(name="HuiRen mr dialogue api", write_to_file=True)
+logger = CustomLogger(name="DaoTest mr dialogue api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 

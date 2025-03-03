@@ -7,6 +7,7 @@ from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueI
 from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
 from llm_api_service.tag_generation import tag_generation, TagSet
 from llm_api_service.qa_generation import process_qa_generation, QaGeneration
+from llm_api_service.decompose_knowledge_point import decompose_knowledge_point, KnowledgePoint
 
 app = FastAPI()
 
@@ -19,6 +20,7 @@ app = FastAPI()
 5. mr_dialogue 案例分析题接口，课后互动题-多轮对话 
 6. tag_generation 标签生成接口
 7. qa_generation 题目生成接口
+8. decompose_knowledge 将整段的知识点拆分成若干个相对独立的知识点
 """
 
 
@@ -65,6 +67,12 @@ def tag_generation_fun(tag_set: TagSet):
 async def qa_generation_fun(qa_gen: QaGeneration, background_tasks: BackgroundTasks):
     background_tasks.add_task(process_qa_generation, qa_gen)
     return {"status": 1}
+
+
+@app.post("/decompose_knowledge")
+async def qa_generation_fun(kg_p: KnowledgePoint):
+    res = decompose_knowledge_point(kg_p)
+    return res
 
 
 if __name__ == "__main__":

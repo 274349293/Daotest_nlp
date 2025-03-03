@@ -17,7 +17,7 @@ logic：
 update:
 1.不再走大模型了，只走逻辑规则
 """
-logger = CustomLogger(name="HuiRen ques judgment api")
+logger = CustomLogger(name="DaoTest ques judgment api")
 system_prompt = """汇仁是一家大型医药企业集团，汇仁公司新招聘了一批新员工，公司已经对新员工完成了入职培训，现在以考试的方式检查新员工是否已经掌握了培训内容。你是一名资深的培训经理，你的任务如下：{
 1.判断员工作答的对错。考试题目全部为填空题，题目中的##代表所需要填写的空位，每个题目中只有1个空位。示例如下：{
 题目：在与客户洽谈时间的安排上，要保证时间满足##要求。

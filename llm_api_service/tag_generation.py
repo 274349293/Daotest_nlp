@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
 import json
 
-logger = CustomLogger(name="HuiRen tag generation api", write_to_file=True)
+logger = CustomLogger(name="DaoTest tag generation api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 

@@ -6,7 +6,7 @@ from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
-logger = CustomLogger(name="HuiRen qa generation api", write_to_file=True)
+logger = CustomLogger(name="DaoTest qa generation api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 

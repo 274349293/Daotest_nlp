@@ -10,7 +10,7 @@ def get_prompt():
         return json.load(prompt)
 
 
-logger = CustomLogger("HuiRen practice stream api")
+logger = CustomLogger("DaoTest practice stream api")
 system_prompt = get_prompt()["practice_stream"]
 
 llm = LLMService(llm_logger=logger)

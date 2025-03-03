@@ -62,7 +62,7 @@ class CustomLogger:
 
 # 示例用法
 if __name__ == "__main__":
-    logger = CustomLogger("HuiRen_nlp_Logger", write_to_file=False)  # 设置为False以打印日志
+    logger = CustomLogger("DaoTest_nlp_Logger", write_to_file=False)  # 设置为False以打印日志
     logger.info("这是一条信息日志")
     logger.debug("这是一条调试日志")
     logger.warning("这是一条警告日志")

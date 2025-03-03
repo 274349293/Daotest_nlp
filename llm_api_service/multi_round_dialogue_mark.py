@@ -6,7 +6,7 @@ from model.llm_service import LLMService
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
 
-logger = CustomLogger(name="HuiRen mr dialogue mark api", write_to_file=True)
+logger = CustomLogger(name="DaoTest mr dialogue mark api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 
