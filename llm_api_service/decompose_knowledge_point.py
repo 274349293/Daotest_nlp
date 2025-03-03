@@ -6,7 +6,7 @@ from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
-logger = CustomLogger(name="DaoTest qa generation api", write_to_file=True)
+logger = CustomLogger(name="DaoTest decompose knowledge api", write_to_file=True)
 llm = LLMService(llm_logger=logger)
 
 
@@ -16,8 +16,6 @@ def get_prompt():
 
 
 class KnowledgePoint(BaseModel):
-    questionNum: int
-    additionalPrompt: str
     id: str
     knowledgePoint: str
 
@@ -41,4 +39,4 @@ def decompose_knowledge_point(kg_p: KnowledgePoint):
         decompose_res = llm.get_response(model_name=model_name, messages=messages)
         print(decompose_res)
 
-        return 1
+        return decompose_res

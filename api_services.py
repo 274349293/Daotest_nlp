@@ -70,7 +70,7 @@ async def qa_generation_fun(qa_gen: QaGeneration, background_tasks: BackgroundTa
 
 
 @app.post("/decompose_knowledge")
-async def qa_generation_fun(kg_p: KnowledgePoint):
+def decompose_knowledge_fun(kg_p: KnowledgePoint):
     res = decompose_knowledge_point(kg_p)
     return res
 
