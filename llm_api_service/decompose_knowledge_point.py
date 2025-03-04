@@ -36,7 +36,7 @@ def decompose_knowledge_point(kg_p: KnowledgePoint):
     for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
         system_prompt = prompt['decompose_knowledge']
         messages = get_messages(model_name, system_prompt, kg_p)
-        decompose_res = llm.get_response(model_name=model_name, messages=messages)
+        decompose_res = json.loads(llm.get_response(model_name=model_name, messages=messages))
         print(decompose_res)
 
         return decompose_res
