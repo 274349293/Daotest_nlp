@@ -104,6 +104,7 @@ class DataHelper:
 def choice_question_generation(data_helper, qa_gen):
     choice_question_res = {"status": 0, "result": []}
     if qa_gen.choiceQuestion.questionNum == 0:
+        logger.info("choice question num is 0")
         return None
     else:
         try:
@@ -140,6 +141,7 @@ def choice_question_generation(data_helper, qa_gen):
 def fib_question_generation(data_helper, qa_gen):
     fib_question_res = {"status": 0, "result": []}
     if qa_gen.fillInTheBlankQuestion.questionNum == 0:
+        logger.info("fib question num is 0")
         return None
     else:
         try:
@@ -176,6 +178,7 @@ def fib_question_generation(data_helper, qa_gen):
 def short_answer_question_generation(data_helper, qa_gen):
     short_answer_question_res = {"status": 0, "result": []}
     if qa_gen.shortAnswerQuestion.questionNum == 0:
+        logger.info("short answer question num is 0")
         return None
     else:
         try:
@@ -212,6 +215,7 @@ def short_answer_question_generation(data_helper, qa_gen):
 def reading_comprehension_question_generation(data_helper, qa_gen):
     reading_comprehension_question_res = {"status": 0, "result": []}
     if qa_gen.readingComprehensionQuestion.questionNum == 0:
+        logger.info("reading comprehension question num is 0")
         return None
     else:
         try:
@@ -257,6 +261,7 @@ def reading_comprehension_question_generation(data_helper, qa_gen):
 def case_analysis_question_generation(data_helper, qa_gen):
     case_analysis_question_res = {"status": 0, "result": []}
     if qa_gen.caseAnalysisQuestion.questionNum == 0:
+        logger.info("case analysis question num is 0")
         return None
     else:
         try:
