@@ -39,7 +39,7 @@ class CaseAnalysisQuestion(BaseModel):
 
 class QaGeneration(BaseModel):
     id: str
-    subTypeId: str
+    subTaskId: str
     knowledgeTitle: str
     knowledgePoint: str
     tagList: List[str] = Field(..., alias="tagList")  # 处理小写字段名
@@ -363,7 +363,7 @@ def qa_generation(qa_gen: QaGeneration):
         futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
     result = qa_type_merging(futures)
-    result["id"], result["subTypeId"] = qa_gen.id, qa_gen.subTypeId
+    result["id"], result["subTaskId"] = qa_gen.id, qa_gen.subTypeId
     return result
 
 
