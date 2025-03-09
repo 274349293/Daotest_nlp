@@ -252,6 +252,14 @@ def reading_comprehension_question_generation(data_helper, qa_gen):
                 logger.info(
                     f"reading comprehension question result were generated successfully, The number of generated is {qa_gen.readingComprehensionQuestion.questionNum}, model name is {model_name}")
                 reading_comprehension_question_res["status"] = 1
+
+                # tmp merge question and case
+
+                for i in range(len(reading_comprehension_question_res['result']) - 1):
+                    reading_comprehension_question_res['result'][i][0] = \
+                        qa_gen.readingComprehensionQuestion.passage + "\n" + \
+                        reading_comprehension_question_res['result'][i][0]
+
                 return reading_comprehension_question_res
         except Exception as e:
             logger.error(e)
@@ -371,6 +379,7 @@ def process_qa_generation(qa_gen: QaGeneration):
     callback_url = "http://127.0.0.1:8080/jeecg-boot/course/question/generateQuestionsCallBack"
     try:
         result = qa_generation(qa_gen)
+        print(result)
         # 需要设置前端的回调地址
         send_result_to_frontend(callback_url, result)
 
