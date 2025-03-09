@@ -255,7 +255,7 @@ def reading_comprehension_question_generation(data_helper, qa_gen):
 
                 # tmp merge question and case
 
-                for i in range(len(reading_comprehension_question_res['result']) - 1):
+                for i in range(len(reading_comprehension_question_res['result'])):
                     reading_comprehension_question_res['result'][i][0] = \
                         qa_gen.readingComprehensionQuestion.passage + "\n" + \
                         reading_comprehension_question_res['result'][i][0]
