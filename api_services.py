@@ -6,7 +6,7 @@ from llm_api_service.practice_stream import get_stream_response, PracticeQaInfo
 from llm_api_service.multi_round_dialogue import multi_round_dialogue, DialogueInfo
 from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark, DialogueMarkInfo
 from llm_api_service.tag_generation import tag_generation, TagSet
-from llm_api_service.qa_generation import process_qa_generation, QaGeneration
+from llm_api_service.qa_generation import process_qa_generation, process_convenient_qa_generation, QaGeneration
 from llm_api_service.decompose_knowledge_point import decompose_knowledge_point, KnowledgePoint
 
 app = FastAPI()
@@ -65,7 +65,12 @@ def tag_generation_fun(tag_set: TagSet):
 
 @app.post("/qa_generation")
 async def qa_generation_fun(qa_gen: QaGeneration, background_tasks: BackgroundTasks):
-    background_tasks.add_task(process_qa_generation, qa_gen)
+    if qa_gen.type == 1:
+        background_tasks.add_task(process_qa_generation, qa_gen)
+    elif qa_gen.type == 0:
+        background_tasks.add_task(process_convenient_qa_generation, qa_gen)
+    else:
+        return {"status": 0}
     return {"status": 1}
 
 

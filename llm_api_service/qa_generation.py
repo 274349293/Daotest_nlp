@@ -39,10 +39,10 @@ class CaseAnalysisQuestion(BaseModel):
 
 class QaGeneration(BaseModel):
     id: str
-    subTaskId: str
+    type: int
     knowledgeTitle: str
     knowledgePoint: str
-    tagList: List[str] = Field(..., alias="tagList")  # 处理小写字段名
+    tagList: List[str] = Field(..., alias="tagList")
     choiceQuestion: Optional[ChoiceQuestion] = None
     fillInTheBlankQuestion: Optional[FillInTheBlankQuestion] = None
     shortAnswerQuestion: Optional[ShortAnswerQuestion] = None
@@ -61,8 +61,13 @@ class DataHelper:
 
     @staticmethod
     def get_messages(task_name, model_name, system_prompt, qa_gen):
-
-        if task_name == "choice_question_generation":
+        if task_name == "tag_generation":
+            system_prompt = system_prompt.replace('[tag_num]', "10")
+            prompt = f"生成特征标签的参考内容如下：\n{qa_gen.knowledgePoint}"
+        elif task_name == "decompose_knowledge_point":
+            system_prompt = system_prompt
+            prompt = f"本次学习材料的关键词list为：{str(qa_gen.tagList)}，\n\n 需要拆分的知识点如下：\n{qa_gen.knowledgePoint}"
+        elif task_name == "choice_question_generation":
             system_prompt = system_prompt.replace('[question_num]', str(qa_gen.choiceQuestion.questionNum))
             additional_prompt = f"除了上述规则外会有额外的附加规则，如果和上面的规则有冲突，则执行上述规则，不执行额外附加规则，附加规则如下：{qa_gen.choiceQuestion.additionalPrompt} \n"
             prompt = additional_prompt + f"本次学习材料的关键词list为：{str(qa_gen.tagList)}，\n\n 本次学习内容如下：\n{qa_gen.knowledgePoint}"
@@ -304,6 +309,10 @@ def case_analysis_question_generation(data_helper, qa_gen):
 
 
 def qa_type_merging(futures):
+    """
+    :param futures: 每个题型作为单独的 futures返回 作为入参
+    :return: 返回题目生成结果
+    """
     result = {
         "choiceQuestion": {
             "status": 0,
@@ -371,15 +380,99 @@ def qa_generation(qa_gen: QaGeneration):
         futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
     result = qa_type_merging(futures)
-    result["id"], result["subTaskId"] = qa_gen.id, qa_gen.subTaskId
+    result["id"] = qa_gen.id
     return result
 
 
+def decompose_knowledge_point(qa_gen):
+    data_helper = DataHelper()
+    prompt = data_helper.prompt
+    try:
+        for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+            system_prompt = prompt['decompose_knowledge']
+            messages = data_helper.get_messages(task_name="decompose_knowledge_point", model_name=model_name,
+                                                system_prompt=system_prompt, qa_gen=qa_gen)
+            decompose_res = json.loads(llm.get_response(model_name=model_name, messages=messages))
+            return decompose_res
+    except Exception as e:
+        logger.error(f"decompose knowledge point error, error is {e}, use original knowledge point")
+        return {"result": [
+            {'knowledgeTitle': qa_gen.knowledgeTitle, 'knowledgePoint': qa_gen.knowledgePoint, 'questionNum': 2}]}
+
+
+def tag_generation(qa_gen):
+    try:
+        data_helper = DataHelper()
+        prompt = data_helper.prompt
+        for model_name in ['gpt-4o', 'qwen-max', 'ERNIE-4.0-8K']:
+            system_prompt = prompt['qa_generation']['tag_generation']
+            tag_messages = data_helper.get_messages(task_name="tag_generation", model_name=model_name,
+                                                    system_prompt=system_prompt, qa_gen=qa_gen)
+            llm_res = json.loads(llm.get_response(model_name=model_name, messages=tag_messages))["result"]
+            logger.info(f"tag generation return success, model is {model_name}, result is {llm_res}")
+            return llm_res
+    except Exception as e:
+        logger.error(e)
+        return []
+
+
 def process_qa_generation(qa_gen: QaGeneration):
+    """
+    正常流程的题目生成结果返回
+    :param qa_gen: 接口入参
+    :return: 结果回调前端接口
+    """
     callback_url = "http://127.0.0.1:8080/jeecg-boot/course/question/generateQuestionsCallBack"
     try:
         result = qa_generation(qa_gen)
         # 需要设置前端的回调地址
+        send_result_to_frontend(callback_url, result)
+
+    except Exception as e:
+        logger.error(f"callback url{callback_url} error : {e}")
+
+
+def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
+    result = {"id": qa_gen.id, "qa_result": []}
+    logger.info("convenient qa generation start ...")
+    try:
+        for qa_item in split_kg:
+            result_item = {
+                qa_item["knowledgeTitle"]: {"splitKnowledgePoint": None, "questionNum": None, "result": None,
+                                            "status": 0}}
+            result_item[qa_item["knowledgeTitle"]]["splitKnowledgePoint"] = qa_item["knowledgePoint"]
+            result_item[qa_item["knowledgeTitle"]]["questionNum"] = qa_item["questionNum"]
+            if qa_gen.choiceQuestion.questionNum != 0:
+                qa_gen.choiceQuestion.questionNum = qa_item["questionNum"]
+            if qa_gen.shortAnswerQuestion.questionNum != 0:
+                qa_gen.shortAnswerQuestion.questionNum = qa_item["questionNum"]
+            if qa_gen.fillInTheBlankQuestion.questionNum != 0:
+                qa_gen.fillInTheBlankQuestion.questionNum = qa_item["questionNum"]
+            if qa_gen.readingComprehensionQuestion.questionNum != 0:
+                qa_gen.readingComprehensionQuestion.questionNum = 1
+            if qa_gen.caseAnalysisQuestion.questionNum != 0:
+                qa_gen.caseAnalysisQuestion.questionNum = 1
+            result_item[qa_item["knowledgeTitle"]]["result"] = qa_generation(qa_gen)
+            result_item[qa_item["knowledgeTitle"]]["status"] = 1
+            result["qa_result"].append(result_item)
+    except Exception as e:
+        logger.error(e)
+    return result
+
+
+def process_convenient_qa_generation(qa_gen: QaGeneration):
+    """
+    一键题目生成的结果返回
+    :param qa_gen: 接口入参
+    :return: 结果回调前端接口
+    """
+    callback_url = "http://127.0.0.1:8080/jeecg-boot/course/question/generateQuestionsCallBack"
+    try:
+        kg_tag_list = tag_generation(qa_gen)
+        qa_gen.tagList = kg_tag_list
+        split_kg = decompose_knowledge_point(qa_gen)
+
+        result = convenient_qa_generation(qa_gen, split_kg["result"])
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
