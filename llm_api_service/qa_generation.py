@@ -433,7 +433,7 @@ def process_qa_generation(qa_gen: QaGeneration):
 
 
 def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
-    result = {"id": qa_gen.id, "qa_result": []}
+    result = {"id": qa_gen.id, "tagList": qa_gen.tagList, "qa_result": []}
     logger.info("convenient qa generation start ...")
     try:
         for qa_item in split_kg:
