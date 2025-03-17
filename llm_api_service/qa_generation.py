@@ -40,6 +40,7 @@ class CaseAnalysisQuestion(BaseModel):
 class QaGeneration(BaseModel):
     id: str
     type: int
+    retryFlag: int
     knowledgeTitle: str
     knowledgePoint: str
     tagList: List[str] = Field(..., alias="tagList")
@@ -380,7 +381,7 @@ def qa_generation(qa_gen: QaGeneration):
         futures.append(executor.submit(case_analysis_question_generation, data_helper, qa_gen))
 
     result = qa_type_merging(futures)
-    result["id"] = qa_gen.id
+    result["id"], result["retryFlag"] = qa_gen.id, qa_gen.retryFlag
     return result
 
 
@@ -433,7 +434,7 @@ def process_qa_generation(qa_gen: QaGeneration):
 
 
 def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
-    result = {"id": qa_gen.id, "tagList": qa_gen.tagList, "qa_result": []}
+    result = {"id": qa_gen.id, "tagList": qa_gen.tagList, "retryFlag": qa_gen.retryFlag, "qa_result": []}
     logger.info("convenient qa generation start ...")
     try:
         for qa_item in split_kg:
