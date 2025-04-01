@@ -365,11 +365,11 @@ def send_result_to_frontend(callback_url: str, result: dict):
     try:
         response = requests.post(callback_url, json=result, headers={"Content-Type": "application/json"})
         if response.status_code == 200:
-            logger.info("Callback sent successfully!")
+            logger.info(f"{result['id']} Callback sent successfully!")
         else:
-            logger.error(f"Callback failed with status code {response.status_code}")
+            logger.error(f"{result['id']} Callback failed with status code {response.status_code}")
     except Exception as e:
-        logger.error(f"Error sending callback: {e}")
+        logger.error(f"{result['id']} Error sending callback: {e}")
 
 
 def qa_generation(qa_gen: QaGeneration):
@@ -433,7 +433,7 @@ def process_qa_generation(qa_gen: QaGeneration):
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
-        logger.error(f"callback url{callback_url} error : {e}")
+        logger.error(f"{qa_gen.id} callback url{callback_url} error : {e}")
 
 
 def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
@@ -480,4 +480,4 @@ def process_convenient_qa_generation(qa_gen: QaGeneration):
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
-        logger.error(f"callback url{callback_url} error : {e}")
+        logger.error(f"{qa_gen.id} callback url{callback_url} error : {e}")
