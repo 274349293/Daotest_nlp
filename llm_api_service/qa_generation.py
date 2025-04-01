@@ -429,7 +429,6 @@ def process_qa_generation(qa_gen: QaGeneration):
     callback_url = "http://127.0.0.1:8080/jeecg-boot/course/question/generateQuestionsCallBack"
     try:
         result = qa_generation(qa_gen)
-        # 需要设置前端的回调地址
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
@@ -437,9 +436,16 @@ def process_qa_generation(qa_gen: QaGeneration):
 
 
 def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
-    result = {"id": qa_gen.id, "tagList": qa_gen.tagList, "retryFlag": qa_gen.retryFlag, "qa_result": []}
+    result = {"id": qa_gen.id, "tagList": qa_gen.tagList, "retryFlag": qa_gen.retryFlag, "qa_result": [],
+              "readingComprehensionQuestion": {}, "caseAnalysisQuestion": {}}
     logger.info("convenient qa generation start ...")
     try:
+        # 优先生成阅读理解和案例分析题 ，后续会覆盖掉qa_gen.readingComprehensionQuestion.questionNum和caseAnalysisQuestion.questionNum的值
+        if qa_gen.readingComprehensionQuestion.questionNum != 0 or qa_gen.caseAnalysisQuestion.questionNum != 0:
+            result_tmp = qa_generation(qa_gen=qa_gen)
+            result["readingComprehensionQuestion"] = result_tmp["readingComprehensionQuestion"]
+            result["caseAnalysisQuestion"] = result_tmp["caseAnalysisQuestion"]
+        # 生成基础题型
         for qa_item in split_kg:
             result_item = {
                 qa_item["knowledgeTitle"]: {"splitKnowledgePoint": None, "questionNum": None, "result": None,
@@ -452,12 +458,12 @@ def convenient_qa_generation(qa_gen: QaGeneration, split_kg: list):
                 qa_gen.shortAnswerQuestion.questionNum = qa_item["questionNum"]
             if qa_gen.fillInTheBlankQuestion.questionNum != 0:
                 qa_gen.fillInTheBlankQuestion.questionNum = qa_item["questionNum"]
-            if qa_gen.readingComprehensionQuestion.questionNum != 0:
-                qa_gen.readingComprehensionQuestion.questionNum = 1
-            if qa_gen.caseAnalysisQuestion.questionNum != 0:
-                qa_gen.caseAnalysisQuestion.questionNum = 1
-            result_item[qa_item["knowledgeTitle"]]["result"] = qa_generation(qa_gen)
+            qa_gen.readingComprehensionQuestion.questionNum = 0
+            qa_gen.caseAnalysisQuestion.questionNum = 0
+            result_item[qa_item["knowledgeTitle"]]["result"] = qa_generation(qa_gen=qa_gen)
             result_item[qa_item["knowledgeTitle"]]["status"] = 1
+            del result_item[qa_item["knowledgeTitle"]]["result"]["id"]
+            del result_item[qa_item["knowledgeTitle"]]["result"]["retryFlag"]
             result["qa_result"].append(result_item)
     except Exception as e:
         logger.error(e)
@@ -477,6 +483,7 @@ def process_convenient_qa_generation(qa_gen: QaGeneration):
         split_kg = decompose_knowledge_point(qa_gen)
 
         result = convenient_qa_generation(qa_gen, split_kg["result"])
+        print(result)
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
