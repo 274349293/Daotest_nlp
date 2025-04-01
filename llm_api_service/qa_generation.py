@@ -353,6 +353,8 @@ def qa_type_merging(futures):
             else:
                 logger.error(f"futures result error ,res item is {future_res}")
                 continue
+        elif future_res is None:
+            continue
         else:
             logger.warning(f"futures result error ,res item is {future_res}")
             continue
@@ -394,6 +396,7 @@ def decompose_knowledge_point(qa_gen):
             messages = data_helper.get_messages(task_name="decompose_knowledge_point", model_name=model_name,
                                                 system_prompt=system_prompt, qa_gen=qa_gen)
             decompose_res = json.loads(llm.get_response(model_name=model_name, messages=messages))
+            logger.info(f"decompose result is {decompose_res}")
             return decompose_res
     except Exception as e:
         logger.error(f"decompose knowledge point error, error is {e}, use original knowledge point")
