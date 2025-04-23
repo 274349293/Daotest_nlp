@@ -483,7 +483,6 @@ def process_convenient_qa_generation(qa_gen: QaGeneration):
         split_kg = decompose_knowledge_point(qa_gen)
 
         result = convenient_qa_generation(qa_gen, split_kg["result"])
-        print(result)
         send_result_to_frontend(callback_url, result)
 
     except Exception as e:
