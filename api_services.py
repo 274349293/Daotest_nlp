@@ -8,6 +8,7 @@ from llm_api_service.multi_round_dialogue_mark import multi_round_dialogue_mark,
 from llm_api_service.tag_generation import tag_generation, TagSet
 from llm_api_service.qa_generation import process_qa_generation, process_convenient_qa_generation, QaGeneration
 from llm_api_service.decompose_knowledge_point import decompose_knowledge_point, KnowledgePoint
+from llm_api_service.azure_realtime_function_call import realtime_function_call, RealtimeFunctionCallInfo
 
 app = FastAPI()
 
@@ -21,6 +22,7 @@ app = FastAPI()
 6. tag_generation 标签生成接口
 7. qa_generation 题目生成接口
 8. decompose_knowledge 将整段的知识点拆分成若干个相对独立的知识点
+9. azure_realtime_function_call 实时语音模型function call 结果返回（用户query检索）
 """
 
 
@@ -78,6 +80,11 @@ async def qa_generation_fun(qa_gen: QaGeneration, background_tasks: BackgroundTa
 def decompose_knowledge_fun(kg_p: KnowledgePoint):
     res = decompose_knowledge_point(kg_p)
     return res
+
+
+@app.post("/realtime_function_call")
+def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
+    return realtime_function_call(fc_info)
 
 
 if __name__ == "__main__":
