@@ -22,7 +22,8 @@ app = FastAPI()
 6. tag_generation 标签生成接口
 7. qa_generation 题目生成接口
 8. decompose_knowledge 将整段的知识点拆分成若干个相对独立的知识点
-9. azure_realtime_function_call 实时语音模型function call 结果返回（用户query检索）
+9. realtime_function_call 实时语音模型function call 结果返回(关键词检索）
+10. realtime_function_call_advanced 实时语音模型function call 结果返回(用户query检索）
 """
 
 
@@ -84,7 +85,14 @@ def decompose_knowledge_fun(kg_p: KnowledgePoint):
 
 @app.post("/realtime_function_call")
 async def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
-    return await realtime_function_call(fc_info)
+    # 快速模式
+    return await realtime_function_call(fc_info, "full_content")
+
+
+@app.post("/realtime_function_call_advanced")
+async def realtime_function_call_advanced_fun(fc_info: RealtimeFunctionCallInfo):
+    # 完整检索模式
+    return await realtime_function_call(fc_info, "advanced_retrieval")
 
 
 if __name__ == "__main__":
