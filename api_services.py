@@ -83,8 +83,8 @@ def decompose_knowledge_fun(kg_p: KnowledgePoint):
 
 
 @app.post("/realtime_function_call")
-def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
-    return realtime_function_call(fc_info)
+async def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
+    return await realtime_function_call(fc_info)
 
 
 if __name__ == "__main__":
