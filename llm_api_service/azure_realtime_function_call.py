@@ -20,6 +20,139 @@ class RealtimeFunctionCallInfo(BaseModel):
     query: Optional[FunctionCallQuery] = None  # 函数调用查询信息，仅在action=getFunctionCallResult时需要
 
 
+def hybrid_retrieve(query: str, course_config: Dict[str, Any]) -> Dict[str, Any]:
+    """混合检索策略 - 从配置文件读取topic_mapping"""
+    structured_knowledge = course_config.get("structured_knowledge", {})
+    full_content = course_config.get("full_training_content", "")
+    topic_mapping = course_config.get("topic_mapping", {})
+
+    # 标准化返回格式
+    result = {
+        "matched": False,
+        "topic": "",
+        "content": "",
+        "score": 0.0,
+        "message": ""
+    }
+
+    if not structured_knowledge:
+        result["message"] = "No structured knowledge available."
+        result["content"] = full_content
+        return result
+
+    # 确保query是字符串
+    if not isinstance(query, str):
+        query = str(query)
+
+    query_lower = query.lower()
+
+    # 第一步：尝试关键词映射（从配置文件读取）
+    for key in topic_mapping:
+        if key in query_lower:
+            matched_topic = topic_mapping[key]
+            if matched_topic in structured_knowledge:
+                logger.info(f"Keyword mapping found match: {matched_topic}")
+                result["matched"] = True
+                result["topic"] = matched_topic
+                result["content"] = structured_knowledge[matched_topic].strip()
+                result["score"] = 10.0  # 关键词映射给满分
+                result["message"] = "Keyword mapping match"
+                return result
+
+    # 第二步：如果关键词映射失败，使用综合评分
+    query_words = re.findall(r'\w+', query_lower)
+    scores = {}
+
+    for topic_name, content in structured_knowledge.items():
+        score = 0
+        content_lower = content.lower()
+        topic_name_lower = topic_name.lower()
+
+        # 1. 标题完全匹配 (权重: 10)
+        if topic_name_lower == query_lower:
+            score += 10
+
+        # 2. 标题包含查询或查询包含标题 (权重: 5)
+        elif query_lower in topic_name_lower or topic_name_lower in query_lower:
+            score += 5
+
+        # 3. 标题中的词出现在查询中 (权重: 3)
+        topic_words = re.findall(r'\w+', topic_name_lower)
+        for word in topic_words:
+            if len(word) > 1 and word in query_lower:
+                score += 3 / len(topic_words) if topic_words else 0
+
+        # 4. 内容关键词匹配 (权重: 2)
+        matched_words = sum(1 for word in query_words if len(word) > 1 and word in content_lower)
+        if query_words and len(query_words) > 0:
+            coverage = matched_words / len(query_words)
+            score += coverage * 2
+
+        # 5. 特殊关键词加分（根据不同主题调整）
+        # 企业出海相关
+        if any(keyword in query_lower for keyword in ["出海", "海外", "国际", "全球化", "走出去"]):
+            if any(keyword in content_lower for keyword in ["出海", "海外", "国际", "全球", "跨境"]):
+                score += 0.5
+
+        # 销售相关
+        if any(keyword in query_lower for keyword in ["销售", "客户", "成交", "营销"]):
+            if any(keyword in content_lower for keyword in ["销售", "客户", "成交", "营销", "购买"]):
+                score += 0.5
+
+        # 项目管理相关
+        if any(keyword in query_lower for keyword in ["项目", "管理", "计划", "进度"]):
+            if any(keyword in content_lower for keyword in ["项目", "管理", "计划", "进度", "团队"]):
+                score += 0.5
+
+        scores[topic_name] = score
+
+    # 找出得分最高的主题
+    if scores:
+        best_topic = max(scores.items(), key=lambda x: x[1])
+        best_topic_name, best_score = best_topic
+
+        # 降低阈值，提高匹配成功率
+        threshold = 0.5
+        if best_score >= threshold:
+            logger.info(f"Hybrid retrieval found match: {best_topic_name} with score {best_score:.2f}")
+            result["matched"] = True
+            result["topic"] = best_topic_name
+            result["content"] = structured_knowledge[best_topic_name].strip()
+            result["score"] = round(best_score, 2)
+            result["message"] = "Hybrid retrieval match"
+            return result
+
+    # 第三步：检查是否包含主题相关关键词，提供默认匹配
+    default_topics = {
+        "出海": "新出海概述",
+        "海外": "新出海概述",
+        "国际": "新出海概述",
+        "全球化": "新出海概述",
+        "走出去": "新出海概述",
+        "销售": "销售基础心理学",
+        "客户": "销售基础心理学",
+        "营销": "销售基础心理学",
+        "项目": "项目管理五大过程组",
+        "管理": "项目管理五大过程组"
+    }
+
+    for keyword, default_topic in default_topics.items():
+        if keyword in query_lower and default_topic in structured_knowledge:
+            logger.info(f"Default match for {keyword} -> {default_topic}")
+            result["matched"] = True
+            result["topic"] = default_topic
+            result["content"] = structured_knowledge[default_topic].strip()
+            result["score"] = 0.8  # 默认匹配给0.8分
+            result["message"] = f"Default match for keyword: {keyword}"
+            return result
+
+    # 第四步：完全没有匹配
+    logger.info(f"No match found for query: {query}")
+    result["message"] = "No relevant topic found, providing complete training content as reference."
+    result["content"] = full_content
+    return result
+
+
 class RealtimeFunctionCallService:
     def __init__(self):
         self.prompt_config = self.load_prompt_config()
@@ -56,153 +189,6 @@ class RealtimeFunctionCallService:
             # 如果没有找到对应的课程配置，返回空字典
             return {}
 
-    def hybrid_retrieve(self, query: str, course_config: Dict[str, Any]) -> Dict[str, Any]:
-        """混合检索策略 - 参考原始代码的实现"""
-        structured_knowledge = course_config.get("structured_knowledge", {})
-        full_content = course_config.get("full_training_content", "")
-
-        if not structured_knowledge:
-            return {
-                "matched": False,
-                "message": "No structured knowledge available.",
-                "full_content": full_content
-            }
-
-        # 确保query是字符串
-        if not isinstance(query, str):
-            query = str(query)
-
-        query_lower = query.lower()
-
-        # 第一步：尝试关键词映射（参考原始代码）
-        topic_mapping = {
-            "新出海": "新出海概述",
-            "出海概述": "新出海概述",
-            "出海趋势": "新出海概述",
-            "趋势": "新出海概述",
-
-            "出海路径": "出海四条路径",
-            "出海方式": "出海四条路径",
-            "四条路径": "出海四条路径",
-            "路径": "出海四条路径",
-
-            "要不要出海": "要不要出海",
-            "是否出海": "要不要出海",
-            "出海决策": "要不要出海",
-            "适合出海": "要不要出海",
-
-            "何时出海": "何时出海",
-            "出海时机": "何时出海",
-            "什么时候出海": "何时出海",
-            "时机": "何时出海",
-
-            "如何出海": "如何出海",
-            "出海方法": "如何出海",
-            "方法": "如何出海",
-
-            "出海条件": "出海必要条件",
-            "必要条件": "出海必要条件",
-            "出海要求": "出海必要条件",
-            "条件": "出海必要条件",
-
-            "文化融合": "文化融合是通行证",
-            "文化适应": "文化融合是通行证",
-            "通行证": "文化融合是通行证",
-            "融合": "文化融合是通行证",
-
-            "商务谈判": "商务谈判是护身符",
-            "法律谈判": "商务谈判是护身符",
-            "护身符": "商务谈判是护身符",
-            "谈判": "商务谈判是护身符",
-
-            "五新": "五新概览",
-            "新基建": "五新概览",
-            "新能源": "五新概览",
-            "新智造": "五新概览",
-            "新消费": "五新概览"
-        }
-
-        # 尝试直接匹配
-        for key in topic_mapping:
-            if key in query_lower:
-                matched_topic = topic_mapping[key]
-                if matched_topic in structured_knowledge:
-                    logger.info(f"Keyword mapping found match: {matched_topic}")
-                    return {
-                        "matched": True,
-                        "topic": matched_topic,
-                        "content": structured_knowledge[matched_topic].strip()
-                    }
-
-        # 第二步：如果关键词映射失败，使用综合评分
-        query_words = re.findall(r'\w+', query_lower)
-        scores = {}
-
-        for topic_name, content in structured_knowledge.items():
-            score = 0
-            content_lower = content.lower()
-            topic_name_lower = topic_name.lower()
-
-            # 1. 标题完全匹配 (权重: 10)
-            if topic_name_lower == query_lower:
-                score += 10
-
-            # 2. 标题包含查询或查询包含标题 (权重: 5)
-            elif query_lower in topic_name_lower or topic_name_lower in query_lower:
-                score += 5
-
-            # 3. 标题中的词出现在查询中 (权重: 3)
-            topic_words = re.findall(r'\w+', topic_name_lower)
-            for word in topic_words:
-                if len(word) > 1 and word in query_lower:
-                    score += 3 / len(topic_words)  # 按词数平均
-
-            # 4. 内容关键词匹配 (权重: 2)
-            matched_words = sum(1 for word in query_words if len(word) > 1 and word in content_lower)
-            if query_words and len(query_words) > 0:
-                coverage = matched_words / len(query_words)
-                score += coverage * 2
-
-            # 5. 特殊关键词加分
-            if any(keyword in query_lower for keyword in ["出海", "海外", "国际", "全球化", "走出去"]):
-                if any(keyword in content_lower for keyword in ["出海", "海外", "国际", "全球", "跨境"]):
-                    score += 0.5
-
-            scores[topic_name] = score
-
-        # 找出得分最高的主题
-        if scores:
-            best_topic = max(scores.items(), key=lambda x: x[1])
-            best_topic_name, best_score = best_topic
-
-            # 降低阈值，提高匹配成功率
-            threshold = 0.5  # 从1.5降低到0.5
-            if best_score >= threshold:
-                logger.info(f"Hybrid retrieval found match: {best_topic_name} with score {best_score:.2f}")
-                return {
-                    "matched": True,
-                    "topic": best_topic_name,
-                    "content": structured_knowledge[best_topic_name].strip()
-                }
-
-        # 第三步：如果还是没有匹配，检查是否包含出海相关关键词
-        if any(keyword in query_lower for keyword in ["出海", "海外", "国际", "全球化", "走出去"]):
-            # 返回新出海概述作为默认
-            if "新出海概述" in structured_knowledge:
-                logger.info(f"Default match for going global keywords")
-                return {
-                    "matched": True,
-                    "topic": "新出海概述",
-                    "content": structured_knowledge["新出海概述"].strip()
-                }
-
-        logger.info(f"No match found for query: {query}")
-        return {
-            "matched": False,
-            "message": "未找到与问题直接相关的主题，提供完整培训内容作为参考。",
-            "full_content": full_content
-        }
-
     def execute_function(self, user_input: str, func_name: str, course_config: Dict[str, Any]) -> Dict[str, Any]:
         """执行指定的函数"""
         # 验证函数名是否匹配课程配置中的function_call_name
@@ -211,21 +197,22 @@ class RealtimeFunctionCallService:
             logger.warning(f"Function name mismatch: expected {expected_func_name}, got {func_name}")
 
         # 使用混合检索策略
-        return self.hybrid_retrieve(user_input, course_config)
+        return hybrid_retrieve(user_input, course_config)
 
     def get_function_call_result(self, query: FunctionCallQuery, topic: str) -> Dict[str, Any]:
         """获取函数调用结果"""
         # 获取课程配置
         course_config = self.get_course_config(topic)
         if not course_config:
-            return {"error": f"Course config not found for topic '{topic}'"}
+            logger.error(f"Course config not found for topic '{topic}'")
+            return {}
 
         func_name = query.function_call_name
         user_input = query.user_input
 
         logger.info(f"Processing function call: {func_name} with user input: {user_input}")
 
-        # 执行函数并获取结果
+        # 执行检索函数并获取结果
         func_result = self.execute_function(user_input, func_name, course_config)
 
         # 返回格式为 {函数名: 结果}
@@ -243,18 +230,17 @@ def realtime_function_call(fc_info: RealtimeFunctionCallInfo) -> Dict[str, Any]:
         if fc_info.action == "startSession":
             # 启动会话
             result = service.start_session(fc_info.topic)
-            logger.info(f"Start session success")
+            logger.info("Start session success")
             return result
 
         elif fc_info.action == "getFunctionCallResult":
             # 获取函数调用结果
             if not fc_info.query:
-                error_msg = "Must provide query parameter when getting function call result"
-                logger.error(error_msg)
-                return {"error": error_msg}
+                logger.error("Must provide query parameter when getting function call result")
+                return {}
 
             result = service.get_function_call_result(fc_info.query, fc_info.topic)
-            logger.info(f"Get function call result success")
+            logger.info("Get function call result success")
             return result
 
         else:
@@ -262,6 +248,5 @@ def realtime_function_call(fc_info: RealtimeFunctionCallInfo) -> Dict[str, Any]:
             return {}
 
     except Exception as e:
-        error_msg = f"Error occurred while processing realtime function call: {str(e)}"
-        logger.error(error_msg)
-        return {"error": error_msg}
+        logger.error(f"Error occurred while processing realtime function call: {str(e)}")
+        return {}
