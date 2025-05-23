@@ -149,7 +149,7 @@ class QueryUnderstanding:
         """快速意图分类"""
         query_lower = query.lower()
         max_score = 0
-        best_intent = "一般咨询"
+        best_intent = "课程培训提问"
 
         for intent, keywords in self.intent_keywords.items():
             score = sum(1 for keyword in keywords if keyword in query_lower)
