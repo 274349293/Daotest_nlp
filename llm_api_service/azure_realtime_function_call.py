@@ -14,6 +14,8 @@ logger = CustomLogger(name="DaoTest optimized retrieval api", write_to_file=True
 
 # 全局模型缓存 - 避免重复加载
 _GLOBAL_MODEL_CACHE = {}
+# 全局索引缓存 - 新增：缓存已构建的索引
+_GLOBAL_INDEX_CACHE = {}
 # 全局变量控制jieba加载
 _JIEBA_LOADED = False
 
@@ -102,9 +104,6 @@ class QueryUnderstanding:
         self.config = config
         # 简化的意图关键词
         self.intent_keywords = {
-            "风险评估": ["风险", "危险", "问题", "困难", "挑战", "不利", "影响", "后果"],
-            "政策咨询": ["政策", "法规", "规定", "要求", "条件"],
-            "市场分析": ["市场", "机会", "前景", "趋势", "竞争"],
             "操作指南": ["如何", "怎么", "方法", "步骤"],
             "时机判断": ["什么时候", "何时", "时机", "时间"],
             "可行性": ["要不要", "是否", "适合", "可以", "能否", "应该"]
@@ -124,7 +123,7 @@ class QueryUnderstanding:
         result = {
             "original": query,
             "cleaned": self._clean_query(query),
-            "intent": "一般咨询",
+            "intent": "课程培训提问",
             "entities": [],
             "expanded_query": query,
             "keywords": []
@@ -379,32 +378,61 @@ class FastKnowledgeRetriever:
         self.sparse_retriever = OptimizedSparseRetriever(self.config)
         self.dense_retriever = OptimizedDenseRetriever(self.config) if self.config.enable_dense_retrieval else None
         self.is_indexed = False
-
-        # 新增：存储课程配置用于关键词映射
         self.course_config = None
         self.documents = []
 
-    def build_index(self, documents: List[Dict[str, Any]], course_config: Dict[str, Any] = None):
-        """构建索引 - 智能策略：只在需要时构建复杂索引"""
-        start_time = time.time()
-        logger.info(f"Building index for {len(documents)} documents")
+    async def retrieve(self, query: str, top_k: int = None) -> Dict[str, Any]:
+        """主检索方法 - 优化版本：移除了延迟构建逻辑"""
+        total_start_time = time.time()
 
-        # 存储配置和文档
-        self.course_config = course_config
-        self.documents = documents
+        if not self.is_indexed:
+            return {
+                "matched": False,
+                "topic": "",
+                "content": "",
+                "score": 0.0,
+                "message": "Index not built"
+            }
 
-        # 根据配置决定构建策略
-        if self.config.fallback_strategy == "advanced_retrieval":
-            # 对于高级检索策略，暂时不构建复杂索引
-            # 只有在关键词匹配失败时才会构建
-            logger.info("Advanced retrieval mode: delaying complex index building until needed")
+        # 第一层：关键词映射快速检索
+        if self.config.enable_keyword_mapping:
+            keyword_result = self.keyword_mapping_search(query)
+            if keyword_result and keyword_result["matched"]:
+                total_time = time.time() - total_start_time
+                keyword_result["total_time"] = round(total_time, 4)
+                logger.info(f"Keyword mapping success. Total time: {total_time:.4f}s")
+                return keyword_result
+
+        # 第二层：失败回退策略
+        if self.config.fallback_strategy == "full_content":
+            # 返回完整培训内容
+            total_time = time.time() - total_start_time
+            full_content = self.course_config.get("full_training_content", "") if self.course_config else ""
+            logger.info(f"Using full content fallback in {total_time:.4f}s")
+            return {
+                "matched": False,
+                "topic": "",
+                "content": full_content,
+                "score": 0.0,
+                "message": "Using full training content - no keyword match found",
+                "retrieval_time": round(total_time, 4)
+            }
+
+        elif self.config.fallback_strategy == "advanced_retrieval":
+            # 直接使用已构建的索引进行高级检索
+            return await self.advanced_retrieval(query, top_k)
+
         else:
-            # 对于full_content策略，不需要构建任何复杂索引
-            logger.info("Full content mode: skipping complex index building")
-
-        self.is_indexed = True
-        total_time = time.time() - start_time
-        logger.info(f"Lightweight index building completed in {total_time:.3f}s")
+            # 未知策略
+            total_time = time.time() - total_start_time
+            return {
+                "matched": False,
+                "topic": "",
+                "content": "",
+                "score": 0.0,
+                "message": f"Unknown fallback strategy: {self.config.fallback_strategy}",
+                "retrieval_time": round(total_time, 4)
+            }
 
     def keyword_mapping_search(self, query: str) -> Optional[Dict[str, Any]]:
         """纯字符串匹配，完全不使用jieba"""
@@ -419,9 +447,8 @@ class FastKnowledgeRetriever:
 
         start_time = time.time()
 
-        # 纯字符串处理，超快速
+        # 纯字符串处理
         query_lower = query.lower().strip()
-        # 移除常见的语气词和标点
         query_clean = re.sub(r'[啊哦呢吧呀？！。，、；："""''（）【】\s]', '', query_lower)
 
         # 1. 完全匹配
@@ -450,8 +477,8 @@ class FastKnowledgeRetriever:
         logger.info(f"No keyword mapping found in {retrieval_time:.4f}s")
         return None
 
-    def _create_match_result(self, topic: str, content: str, score: float, message: str, retrieval_time: float) -> Dict[
-        str, Any]:
+    def _create_match_result(self, topic: str, content: str, score: float,
+                             message: str, retrieval_time: float) -> Dict[str, Any]:
         """创建匹配结果"""
         return {
             "matched": True,
@@ -463,7 +490,7 @@ class FastKnowledgeRetriever:
         }
 
     async def advanced_retrieval(self, query: str, top_k: int = None) -> Dict[str, Any]:
-        """高级检索（BM25 + 向量检索 + 重排序）"""
+        """高级检索 - 使用预构建的索引"""
         if not self.is_indexed:
             return {
                 "matched": False,
@@ -523,113 +550,18 @@ class FastKnowledgeRetriever:
                 "retrieval_time": round(total_time, 3)
             }
 
-    async def retrieve(self, query: str, top_k: int = None) -> Dict[str, Any]:
-        """主检索方法 - 智能分层检索策略"""
-        total_start_time = time.time()
 
-        if not self.is_indexed:
-            return {
-                "matched": False,
-                "topic": "",
-                "content": "",
-                "score": 0.0,
-                "message": "Index not built"
-            }
+# 创建全局服务实例（启动时构建索引）
+_GLOBAL_SERVICE_INSTANCE = None
 
-        # 第一层：关键词映射快速检索（始终先尝试）
-        if self.config.enable_keyword_mapping:
-            keyword_result = self.keyword_mapping_search(query)
-            if keyword_result and keyword_result["matched"]:
-                total_time = time.time() - total_start_time
-                keyword_result["total_time"] = round(total_time, 4)
-                logger.info(f"Keyword mapping success, skipping advanced retrieval. Total time: {total_time:.4f}s")
-                return keyword_result
 
-        # 第二层：失败回退策略
-        if self.config.fallback_strategy == "full_content":
-            # 返回完整培训内容
-            total_time = time.time() - total_start_time
-            full_content = self.course_config.get("full_training_content", "") if self.course_config else ""
-            logger.info(f"Using full content fallback in {total_time:.4f}s")
-            return {
-                "matched": False,
-                "topic": "",
-                "content": full_content,
-                "score": 0.0,
-                "message": "Using full training content - no keyword match found",
-                "retrieval_time": round(total_time, 4)
-            }
-
-        elif self.config.fallback_strategy == "advanced_retrieval":
-            # 延迟构建高级检索器
-            logger.info("Keyword mapping failed, building advanced retrieval index...")
-
-            # 检查是否已经有高级检索器
-            if not hasattr(self, 'advanced_retriever') or self.advanced_retriever is None:
-                # 现在才构建复杂索引
-                advanced_config = getattr(self, 'advanced_config', None)
-                if advanced_config:
-                    self.advanced_retriever = FastKnowledgeRetriever(advanced_config)
-                    self.advanced_retriever.query_processor = QueryUnderstanding(advanced_config)
-                    self.advanced_retriever.sparse_retriever = OptimizedSparseRetriever(advanced_config)
-                    self.advanced_retriever.dense_retriever = OptimizedDenseRetriever(
-                        advanced_config) if advanced_config.enable_dense_retrieval else None
-
-                    # 构建文档
-                    documents = []
-                    structured_knowledge = self.course_config.get("structured_knowledge",
-                                                                  {}) if self.course_config else {}
-                    for title, content in structured_knowledge.items():
-                        documents.append({
-                            'title': title,
-                            'content': content,
-                            'metadata': {'topic': 'advanced'}
-                        })
-
-                    # 只有在这里才构建复杂索引
-                    if documents:
-                        logger.info("Building advanced index now...")
-                        build_start = time.time()
-
-                        if advanced_config.enable_sparse_retrieval:
-                            self.advanced_retriever.sparse_retriever.build_index(documents)
-
-                        if advanced_config.enable_dense_retrieval and self.advanced_retriever.dense_retriever:
-                            self.advanced_retriever.dense_retriever.build_index(documents)
-
-                        self.advanced_retriever.is_indexed = True
-                        self.advanced_retriever.documents = documents
-
-                        build_time = time.time() - build_start
-                        logger.info(f"Advanced index built in {build_time:.3f}s")
-
-            # 使用高级检索
-            if hasattr(self, 'advanced_retriever') and self.advanced_retriever:
-                return await self.advanced_retriever.advanced_retrieval(query, top_k)
-            else:
-                # 高级检索失败，返回完整内容
-                total_time = time.time() - total_start_time
-                full_content = self.course_config.get("full_training_content", "") if self.course_config else ""
-                return {
-                    "matched": False,
-                    "topic": "",
-                    "content": full_content,
-                    "score": 0.0,
-                    "message": "Advanced retrieval failed, using full content",
-                    "retrieval_time": round(total_time, 4)
-                }
-
-        else:
-            # 未知策略
-            total_time = time.time() - total_start_time
-            return {
-                "matched": False,
-                "topic": "",
-                "content": "",
-                "score": 0.0,
-                "message": f"Unknown fallback strategy: {self.config.fallback_strategy}",
-                "retrieval_time": round(total_time, 4)
-            }
+def get_service_instance():
+    """获取全局服务实例"""
+    global _GLOBAL_SERVICE_INSTANCE
+    if _GLOBAL_SERVICE_INSTANCE is None:
+        logger.info("Creating global service instance...")
+        _GLOBAL_SERVICE_INSTANCE = OptimizedRealtimeFunctionCallService()
+    return _GLOBAL_SERVICE_INSTANCE
 
 
 # 原有接口适配
@@ -649,6 +581,109 @@ class OptimizedRealtimeFunctionCallService:
         self.prompt_config = self.load_prompt_config()
         self.courses_config = self.prompt_config.get("azure_realtime_function_call", {})
         self.retrievers = {}  # 缓存检索器
+        # 新增：启动时预构建所有课程的索引
+        self._prebuild_all_indexes()
+
+    def _prebuild_all_indexes(self):
+        """预构建所有课程的索引"""
+        logger.info("Starting to prebuild indexes for all courses...")
+        start_time = time.time()
+
+        for topic, course_config in self.courses_config.items():
+            try:
+                # 为每个主题预构建两种策略的索引
+                for strategy in ["full_content", "advanced_retrieval"]:
+                    cache_key = f"{topic}_{strategy}"
+                    if cache_key not in self.retrievers:
+                        logger.info(f"Prebuilding index for {topic} with {strategy} strategy...")
+                        retriever = self._create_and_build_retriever(topic, course_config, strategy)
+                        self.retrievers[cache_key] = retriever
+
+            except Exception as e:
+                logger.error(f"Failed to prebuild index for {topic}: {e}")
+
+        total_time = time.time() - start_time
+        logger.info(f"Finished prebuilding indexes in {total_time:.2f}s")
+
+    def _create_and_build_retriever(self, topic: str, course_config: Dict[str, Any],
+                                    fallback_strategy: str) -> FastKnowledgeRetriever:
+        """创建并构建检索器（包括索引）"""
+        if fallback_strategy == "full_content":
+            # 轻量级配置，只需要关键词映射
+            config = RetrievalConfig(
+                enable_keyword_mapping=True,
+                enable_query_understanding=False,
+                enable_sparse_retrieval=False,
+                enable_dense_retrieval=False,
+                enable_reranking=False,
+                fallback_strategy=fallback_strategy,
+                enable_caching=True
+            )
+
+            retriever = FastKnowledgeRetriever(config)
+            retriever.course_config = course_config
+            retriever.documents = []
+            retriever.is_indexed = True
+
+        else:  # advanced_retrieval
+            # 完整配置
+            config = RetrievalConfig(
+                enable_keyword_mapping=True,
+                enable_query_understanding=True,
+                enable_sparse_retrieval=True,
+                enable_dense_retrieval=True,
+                enable_reranking=False,  # 可选
+                fallback_strategy=fallback_strategy,
+                top_k_candidates=10,
+                final_top_k=5,
+                max_content_length=800,
+                enable_caching=True
+            )
+
+            retriever = FastKnowledgeRetriever(config)
+            retriever.course_config = course_config
+
+            # 立即构建文档和索引
+            documents = []
+            structured_knowledge = course_config.get("structured_knowledge", {})
+            for title, content in structured_knowledge.items():
+                documents.append({
+                    'title': title,
+                    'content': content,
+                    'metadata': {'topic': topic}
+                })
+
+            if documents:
+                # 构建所有索引
+                retriever.documents = documents
+                retriever.is_indexed = True
+
+                # 构建稀疏索引
+                if config.enable_sparse_retrieval:
+                    retriever.sparse_retriever.build_index(documents)
+
+                # 构建密集索引
+                if config.enable_dense_retrieval:
+                    retriever.dense_retriever.build_index(documents)
+
+        return retriever
+
+    def get_or_create_retriever(self, topic: str, course_config: Dict[str, Any],
+                                fallback_strategy: str = "full_content") -> FastKnowledgeRetriever:
+        """获取或创建检索器 - 优化版本：使用预构建的索引"""
+        cache_key = f"{topic}_{fallback_strategy}"
+
+        # 如果已经有预构建的检索器，直接返回
+        if cache_key in self.retrievers:
+            logger.info(f"Using pre-built retriever for {topic} with {fallback_strategy}")
+            return self.retrievers[cache_key]
+
+        # 如果没有预构建（例如新增的主题），则创建并构建
+        logger.warning(f"No pre-built retriever found for {topic}, building now...")
+        retriever = self._create_and_build_retriever(topic, course_config, fallback_strategy)
+        self.retrievers[cache_key] = retriever
+
+        return retriever
 
     @staticmethod
     def load_prompt_config():
@@ -664,55 +699,6 @@ class OptimizedRealtimeFunctionCallService:
             return self.courses_config[topic]
         return None
 
-    def get_or_create_retriever(self, topic: str, course_config: Dict[str, Any],
-                                fallback_strategy: str = "full_content") -> FastKnowledgeRetriever:
-        """获取或创建检索器 - 优化版本：先尝试关键词匹配，成功则跳过复杂索引构建"""
-        cache_key = f"{topic}_{fallback_strategy}"
-
-        if cache_key not in self.retrievers:
-            # 无论什么策略，都先创建轻量级配置进行关键词匹配测试
-            lightweight_config = RetrievalConfig(
-                enable_keyword_mapping=True,
-                enable_query_understanding=False,
-                enable_sparse_retrieval=False,
-                enable_dense_retrieval=False,
-                enable_reranking=False,
-                fallback_strategy=fallback_strategy,
-                top_k_candidates=1,
-                final_top_k=1,
-                max_content_length=800,
-                enable_caching=True
-            )
-
-            # 先创建轻量级检索器
-            retriever = FastKnowledgeRetriever(lightweight_config)
-
-            # 只传递课程配置，不构建复杂索引
-            retriever.course_config = course_config
-            retriever.documents = []
-            retriever.is_indexed = True  # 标记为已索引（只是关键词映射）
-
-            # 如果需要高级检索，稍后再构建复杂索引
-            if fallback_strategy == "advanced_retrieval":
-                retriever.advanced_config = RetrievalConfig(
-                    enable_keyword_mapping=True,
-                    enable_query_understanding=True,
-                    enable_sparse_retrieval=True,
-                    enable_dense_retrieval=True,
-                    enable_reranking=True,
-                    fallback_strategy="advanced_retrieval",
-                    top_k_candidates=5,
-                    final_top_k=1,
-                    max_content_length=800,
-                    enable_caching=True
-                )
-                retriever.advanced_retriever = None  # 延迟初始化
-
-            self.retrievers[cache_key] = retriever
-            logger.info(f"Created lightweight retriever for topic: {topic} with fallback: {fallback_strategy}")
-
-        return self.retrievers.get(cache_key)
-
     def start_session(self, topic: str) -> Dict[str, Any]:
         course_config = self.get_course_config(topic)
         if course_config:
@@ -724,19 +710,13 @@ class OptimizedRealtimeFunctionCallService:
 
     async def get_function_call_result(self, query: FunctionCallQuery, topic: str,
                                        fallback_strategy: str = "full_content") -> Dict[str, Any]:
-        """获取函数调用结果
-
-        Args:
-            query: 查询对象
-            topic: 主题
-            fallback_strategy: 失败回退策略 ("full_content" 或 "advanced_retrieval")
-        """
+        """获取函数调用结果"""
         course_config = self.get_course_config(topic)
         if not course_config:
             logger.error(f"Course config not found for topic '{topic}'")
             return {}
 
-        # 获取检索器
+        # 获取预构建的检索器
         retriever = self.get_or_create_retriever(topic, course_config, fallback_strategy)
         if not retriever:
             return {}
@@ -752,20 +732,16 @@ class OptimizedRealtimeFunctionCallService:
         return {func_name: result}
 
 
-async def realtime_function_call(fc_info: RealtimeFunctionCallInfo, fallback_strategy: str = "full_content") -> Dict[
-    str, Any]:
-    """处理实时函数调用接口
-
-    Args:
-        fc_info: 函数调用信息
-        fallback_strategy: 失败回退策略 ("full_content" 或 "advanced_retrieval")
-    """
+async def realtime_function_call(fc_info: RealtimeFunctionCallInfo,
+                                 fallback_strategy: str = "full_content") -> Dict[str, Any]:
+    """处理实时函数调用接口 - 优化版本：使用全局服务实例"""
     logger.info("------------------start--------------------")
     logger.info(
         f"Received retrieval request: topic={fc_info.topic}, action={fc_info.action}, fallback={fallback_strategy}")
 
     try:
-        service = OptimizedRealtimeFunctionCallService()
+        # 使用全局服务实例（已预构建索引）
+        service = get_service_instance()
 
         if fc_info.action == "startSession":
             result = service.start_session(fc_info.topic)
@@ -788,15 +764,3 @@ async def realtime_function_call(fc_info: RealtimeFunctionCallInfo, fallback_str
     except Exception as e:
         logger.error(f"Error occurred while processing realtime function call: {str(e)}")
         return {}
-
-
-# 为了保持向后兼容，提供原始接口
-async def realtime_function_call_original(fc_info: RealtimeFunctionCallInfo) -> Dict[str, Any]:
-    """原始接口 - 默认使用full_content策略"""
-    return await realtime_function_call(fc_info, "full_content")
-
-
-# 高级检索接口
-async def realtime_function_call_advanced(fc_info: RealtimeFunctionCallInfo) -> Dict[str, Any]:
-    """高级检索接口 - 使用advanced_retrieval策略"""
-    return await realtime_function_call(fc_info, "advanced_retrieval")
