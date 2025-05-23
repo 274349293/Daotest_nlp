@@ -85,13 +85,11 @@ def decompose_knowledge_fun(kg_p: KnowledgePoint):
 
 @app.post("/realtime_function_call")
 async def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
-    # 快速模式
     return await realtime_function_call(fc_info, "full_content")
 
 
 @app.post("/realtime_function_call_advanced")
 async def realtime_function_call_advanced_fun(fc_info: RealtimeFunctionCallInfo):
-    # 完整检索模式
     return await realtime_function_call(fc_info, "advanced_retrieval")
 
 
