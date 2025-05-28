@@ -704,12 +704,7 @@ class OptimizedRealtimeFunctionCallService:
         if course_config:
             return {
                 "instructions": course_config.get("instructions", ""),
-                "tools": course_config.get("tools", []),
-                "name": {
-                    "type": "string",
-                    "description": "函数名称",
-                    "const": course_config.get("function_call_name", "")
-                }
+                "tools": course_config.get("tools", [])
             }
         return {}
 

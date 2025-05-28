@@ -26,6 +26,11 @@
               "topic": {
                 "type": "string",
                 "description": "用户查询的企业出海相关问题或主题"
+              },
+              "name": {
+                "type": "string",
+                "description": "函数名称",
+                "const": "get_enterprise_going_global_info"
               }
             },
             "required": [
@@ -99,6 +104,11 @@
               "topic": {
                 "type": "string",
                 "description": "用户查询的汇仁肾宝糖浆相关问题或主题"
+              },
+              "name": {
+                "type": "string",
+                "description": "函数名称",
+                "const": "get_huiren_training_info"
               }
             },
             "required": [
