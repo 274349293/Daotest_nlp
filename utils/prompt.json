@@ -34,7 +34,8 @@
               }
             },
             "required": [
-              "topic"
+              "topic",
+              "name"
             ]
           }
         }
@@ -112,7 +113,8 @@
               }
             },
             "required": [
-              "topic"
+              "topic",
+              "name"
             ]
           }
         }
