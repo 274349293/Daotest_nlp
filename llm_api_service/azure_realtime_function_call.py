@@ -42,7 +42,7 @@ def get_cached_model(model_type: str, model_name: str = None):
         try:
             if model_type == "sentence_transformer":
                 from sentence_transformers import SentenceTransformer
-                model = SentenceTransformer(model_name or 'paraphrase-multilingual-MiniLM-L12-v2')
+                model = SentenceTransformer("./temp_model")
                 _GLOBAL_MODEL_CACHE[cache_key] = model
                 logger.info(f"Loaded and cached {model_type} model")
 
@@ -704,7 +704,12 @@ class OptimizedRealtimeFunctionCallService:
         if course_config:
             return {
                 "instructions": course_config.get("instructions", ""),
-                "tools": course_config.get("tools", [])
+                "tools": course_config.get("tools", []),
+                "name": {
+                    "type": "string",
+                    "description": "函数名称",
+                    "const": course_config.get("function_call_name", "")
+                }
             }
         return {}
 
