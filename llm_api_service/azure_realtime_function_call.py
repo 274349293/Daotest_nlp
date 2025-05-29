@@ -3,6 +3,7 @@ import re
 import math
 import asyncio
 import time
+import aiohttp
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
@@ -11,6 +12,10 @@ import jieba.analyse
 from collections import Counter
 
 logger = CustomLogger(name="DaoTest optimized retrieval api", write_to_file=True)
+
+# 新闻API配置
+NEWS_API_URL = "https://eventregistry.org/api/v1/article/getArticles"
+NEWS_API_KEY = "81299327-0db9-44f5-8c7c-f879c302fe8b"
 
 # 全局模型缓存 - 避免重复加载
 _GLOBAL_MODEL_CACHE = {}
@@ -551,6 +556,302 @@ class FastKnowledgeRetriever:
             }
 
 
+# ===== 新增：新闻检索功能 =====
+
+def extract_news_keywords(user_input: str) -> str:
+    """
+    智能提取新闻搜索关键词
+
+    Args:
+        user_input (str): 用户输入的原始问题
+
+    Returns:
+        str: 提取出的关键词
+    """
+    logger.info(f"开始提取新闻关键词，原始输入: '{user_input}'")
+
+    # 去除常见的疑问词和语气词
+    stop_words = [
+        '吗', '呢', '了', '的', '在', '是', '有', '没有', '会', '能', '可以', '应该',
+        '什么', '怎么', '如何', '为什么', '哪里', '哪个', '多少', '几', '？', '?', '！', '!',
+        '、', '，', ',', '。', '.', '：', ':', '；', ';'
+    ]
+
+    # 去除疑问句式
+    question_patterns = [
+        r'.*了吗\？?$',
+        r'.*呢\？?$',
+        r'.*吗\？?$',
+        r'^是否.*',
+        r'^有没有.*',
+        r'^会不会.*',
+        r'^能不能.*'
+    ]
+
+    cleaned_input = user_input.strip()
+
+    # 处理疑问句式
+    for pattern in question_patterns:
+        if re.match(pattern, cleaned_input):
+            # 移除疑问句尾
+            cleaned_input = re.sub(r'了吗\？?$|呢\？?$|吗\？?$', '', cleaned_input)
+            cleaned_input = re.sub(r'^是否|^有没有|^会不会|^能不能', '', cleaned_input)
+            break
+
+    # 使用jieba进行分词和关键词提取
+    words = jieba.lcut(cleaned_input)
+
+    # 过滤停用词
+    filtered_words = []
+    for word in words:
+        if word not in stop_words and len(word.strip()) > 0:
+            filtered_words.append(word)
+
+    # 重新组合成关键词
+    if filtered_words:
+        keyword = ''.join(filtered_words)
+    else:
+        # 如果过滤后没有词，使用原始输入去除标点符号
+        keyword = re.sub(r'[？？！！。，、；：\s]+', '', user_input)
+
+    logger.info(f"关键词提取完成: '{user_input}' -> '{keyword}'")
+    logger.info(f"分词结果: {words}")
+    logger.info(f"过滤后的词: {filtered_words}")
+
+    return keyword
+
+
+async def search_news_articles(keyword: str, articles_count: int = 3, days_back: int = 31) -> Dict[str, Any]:
+    """
+    搜索相关新闻文章
+
+    Parameters:
+        keyword (str): 搜索关键词
+        articles_count (int): 返回文章数量，默认3篇
+        days_back (int): 搜索最近多少天的新闻，默认31天
+
+    Returns:
+        Dict[str, Any]: 包含搜索结果的字典
+    """
+    logger.info(f"开始搜索新闻 - 关键词: '{keyword}', 数量: {articles_count}, 天数: {days_back}")
+
+    try:
+        # 构建请求参数
+        request_params = {
+            "action": "getArticles",
+            "keyword": keyword,
+            "sourceLocationUri": [
+                "http://en.wikipedia.org/wiki/China",
+                "http://en.wikipedia.org/wiki/United_States",
+                "http://en.wikipedia.org/wiki/Canada",
+                "http://en.wikipedia.org/wiki/United_Kingdom"
+            ],
+            "ignoreSourceGroupUri": "paywall/paywalled_sources",
+            "articlesPage": 1,
+            "articlesCount": min(articles_count, 10),  # 限制最多10篇
+            "articlesSortBy": "date",
+            "articlesSortByAsc": False,  # 最新的在前
+            "dataType": ["news", "pr"],
+            "forceMaxDataTimeWindow": days_back,
+            "resultType": "articles",
+            "apiKey": NEWS_API_KEY
+        }
+
+        logger.info(f"新闻API请求参数: {json.dumps(request_params, indent=2, ensure_ascii=False)}")
+
+        # 发起异步HTTP请求
+        async with aiohttp.ClientSession() as session:
+            logger.info(f"发起HTTP请求到: {NEWS_API_URL}")
+            async with session.post(NEWS_API_URL, json=request_params, timeout=30) as response:
+                logger.info(f"HTTP响应状态码: {response.status}")
+
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info(f"API返回数据结构: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+
+                    # 检查是否有文章结果
+                    if "articles" in data and "results" in data["articles"]:
+                        articles = data["articles"]["results"]
+                        total_results = data["articles"].get("totalResults", 0)
+
+                        logger.info(f"找到文章数量: {len(articles)}, 总结果数: {total_results}")
+
+                        if not articles:
+                            logger.warning(f"未找到关于'{keyword}'的相关新闻")
+                            return {
+                                "success": False,
+                                "message": f"未找到关于'{keyword}'的相关新闻",
+                                "articles": []
+                            }
+
+                        # 处理文章数据，提取关键信息
+                        processed_articles = []
+                        for i, article in enumerate(articles[:articles_count]):
+                            logger.info(f"处理第{i + 1}篇文章: {article.get('title', '无标题')[:50]}...")
+
+                            processed_article = {
+                                "title": article.get("title", "无标题"),
+                                "date": article.get("date", "未知日期"),
+                                "time": article.get("time", "未知时间"),
+                                "url": article.get("url", ""),
+                                "source": article.get("source", {}).get("title", "未知来源"),
+                                "body": article.get("body", "无内容")[:1000] + "..." if len(
+                                    article.get("body", "")) > 1000 else article.get("body", "无内容"),  # 限制正文长度
+                                "language": article.get("lang", "未知"),
+                                "relevance": article.get("relevance", 0)
+                            }
+                            processed_articles.append(processed_article)
+
+                        logger.info(f"成功处理{len(processed_articles)}篇文章")
+
+                        return {
+                            "success": True,
+                            "message": f"找到 {len(processed_articles)} 篇关于'{keyword}'的相关新闻",
+                            "keyword": keyword,
+                            "total_results": total_results,
+                            "articles": processed_articles
+                        }
+                    else:
+                        logger.error(f"API返回数据格式异常 - 数据结构: {data}")
+                        return {
+                            "success": False,
+                            "message": f"API返回数据格式异常，未找到关于'{keyword}'的新闻",
+                            "articles": []
+                        }
+                else:
+                    logger.error(f"新闻API请求失败 - 状态码: {response.status}, 响应内容: {await response.text()}")
+                    return {
+                        "success": False,
+                        "message": f"新闻API请求失败，状态码: {response.status}",
+                        "articles": []
+                    }
+
+    except asyncio.TimeoutError:
+        logger.error("新闻API请求超时")
+        return {
+            "success": False,
+            "message": "新闻API请求超时，请稍后重试",
+            "articles": []
+        }
+    except Exception as e:
+        logger.error(f"搜索新闻时发生错误: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "message": f"搜索新闻时发生错误: {str(e)}",
+            "articles": []
+        }
+
+
+def summarize_news_articles(news_result: Dict[str, Any]) -> str:
+    """
+    总结新闻文章内容
+
+    Parameters:
+        news_result (Dict[str, Any]): 新闻搜索结果
+
+    Returns:
+        str: 新闻总结
+    """
+    logger.info("开始生成新闻总结")
+
+    if not news_result.get("success") or not news_result.get("articles"):
+        error_message = f"新闻搜索失败: {news_result.get('message', '未知错误')}"
+        logger.info(f"新闻总结结果: {error_message}")
+        return error_message
+
+    articles = news_result["articles"]
+    keyword = news_result.get("keyword", "相关主题")
+
+    summary_parts = [
+        f"🔍 关于'{keyword}'的最新新闻总结:",
+        f"📊 共找到 {news_result.get('total_results', 0)} 篇相关报道，以下是最新的 {len(articles)} 篇:",
+        ""
+    ]
+
+    for i, article in enumerate(articles, 1):
+        summary_parts.extend([
+            f"📰 新闻 {i}:",
+            f"   标题: {article['title']}",
+            f"   时间: {article['date']} {article['time']}",
+            f"   来源: {article['source']}",
+            f"   语言: {article['language']}",
+            f"   摘要: {article['body'][:200]}{'...' if len(article['body']) > 200 else ''}",
+            f"   链接: {article['url']}",
+            ""
+        ])
+
+    summary_parts.append("💡 这些是您询问的新闻内容吗？如果需要了解具体某篇新闻的详细内容，请告诉我。")
+
+    summary = "\n".join(summary_parts)
+    logger.info(f"新闻总结生成完成，总长度: {len(summary)} 字符")
+
+    return summary
+
+
+# 新增：新闻搜索函数（function call入口）
+async def get_latest_news(keyword: str, count: int = 3, days: int = 31) -> Dict[str, Any]:
+    """搜索最新相关新闻
+
+    Parameters:
+        keyword (str): 搜索关键词
+        count (int): 返回新闻数量，默认3篇，最多10篇
+        days (int): 搜索最近多少天的新闻，默认31天
+
+    Returns:
+        Dict[str, Any]: 包含新闻搜索结果和总结的字典
+    """
+    logger.info(f"=== 开始新闻搜索函数调用 ===")
+    logger.info(f"入参 - 关键词: '{keyword}', 数量: {count}, 天数: {days}")
+
+    try:
+        # 限制参数范围
+        count = min(max(count, 1), 10)  # 1-10篇
+        days = min(max(days, 1), 90)  # 1-90天
+
+        logger.info(f"参数范围限制后 - 数量: {count}, 天数: {days}")
+
+        # 搜索新闻
+        logger.info("开始调用 search_news_articles")
+        news_result = await search_news_articles(keyword, count, days)
+        logger.info(
+            f"search_news_articles 返回结果: success={news_result.get('success')}, 文章数={len(news_result.get('articles', []))}")
+
+        # 生成总结
+        logger.info("开始生成新闻总结")
+        summary = summarize_news_articles(news_result)
+        logger.info("新闻总结生成完成")
+
+        final_result = {
+            "success": news_result["success"],
+            "keyword": keyword,
+            "search_params": {
+                "count": count,
+                "days": days
+            },
+            "raw_result": news_result,
+            "summary": summary,
+            "message": news_result.get("message", "")
+        }
+
+        logger.info(f"=== 新闻搜索函数调用完成 ===")
+        logger.info(f"最终结果: success={final_result['success']}, 关键词='{final_result['keyword']}'")
+
+        return final_result
+
+    except Exception as e:
+        logger.error(f"新闻搜索函数发生异常: {str(e)}", exc_info=True)
+        error_result = {
+            "success": False,
+            "keyword": keyword,
+            "error": str(e),
+            "summary": f"搜索关于'{keyword}'的新闻时发生错误: {str(e)}",
+            "message": "新闻搜索功能暂时不可用"
+        }
+
+        logger.info(f"=== 新闻搜索函数调用异常结束 ===")
+        return error_result
+
+
 # 创建全局服务实例（启动时构建索引）
 _GLOBAL_SERVICE_INSTANCE = None
 
@@ -711,14 +1012,15 @@ class OptimizedRealtimeFunctionCallService:
     async def get_function_call_result(self, query: FunctionCallQuery, topic: str,
                                        fallback_strategy: str = "full_content") -> Dict[str, Any]:
         """获取函数调用结果"""
+        logger.info(f"=== 开始处理函数调用 ===")
+        logger.info(f"主题: {topic}")
+        logger.info(f"回退策略: {fallback_strategy}")
+        logger.info(f"函数名: {query.function_call_name}")
+        logger.info(f"用户输入: '{query.user_input}'")
+
         course_config = self.get_course_config(topic)
         if not course_config:
             logger.error(f"Course config not found for topic '{topic}'")
-            return {}
-
-        # 获取预构建的检索器
-        retriever = self.get_or_create_retriever(topic, course_config, fallback_strategy)
-        if not retriever:
             return {}
 
         func_name = query.function_call_name
@@ -726,41 +1028,106 @@ class OptimizedRealtimeFunctionCallService:
 
         logger.info(f"Processing function call: {func_name} with input: {user_input}, fallback: {fallback_strategy}")
 
-        # 执行检索
-        result = await retriever.retrieve(user_input)
+        # 处理新闻搜索函数调用
+        if func_name == "get_latest_news":
+            logger.info("识别为新闻搜索函数调用")
+            try:
+                # 智能提取关键词
+                logger.info("开始提取搜索关键词")
+                keyword = extract_news_keywords(user_input)
+                logger.info(f"提取的关键词: '{keyword}'")
 
-        return {func_name: result}
+                # 调用新闻搜索函数
+                logger.info("开始调用新闻搜索API")
+                result = await get_latest_news(keyword, count=3, days=31)
+                logger.info(f"新闻搜索完成: success={result.get('success')}")
+
+                final_result = {func_name: result}
+                logger.info(f"=== 新闻搜索函数调用完成 ===")
+                return final_result
+
+            except Exception as e:
+                logger.error(f"新闻搜索函数调用异常: {str(e)}", exc_info=True)
+                error_result = {func_name: {
+                    "success": False,
+                    "keyword": user_input,
+                    "error": str(e),
+                    "summary": f"搜索新闻时发生错误: {str(e)}",
+                    "message": "新闻搜索功能暂时不可用"
+                }}
+                logger.info(f"=== 新闻搜索函数调用异常结束 ===")
+                return error_result
+
+        # 处理培训知识检索函数调用
+        elif func_name in ["get_enterprise_going_global_info", "get_huiren_training_info"]:
+            logger.info(f"识别为培训知识检索函数调用: {func_name}")
+
+            # 获取预构建的检索器
+            logger.info("获取预构建的检索器")
+            retriever = self.get_or_create_retriever(topic, course_config, fallback_strategy)
+            if not retriever:
+                logger.error("检索器获取失败")
+                return {}
+
+            # 执行检索
+            logger.info("开始执行知识检索")
+            result = await retriever.retrieve(user_input)
+            logger.info(f"知识检索完成: matched={result.get('matched')}, topic='{result.get('topic')}'")
+
+            final_result = {func_name: result}
+            logger.info(f"=== 培训知识检索函数调用完成 ===")
+            return final_result
+
+        else:
+            logger.error(f"Unknown function call: {func_name}")
+            logger.info(f"=== 未知函数调用结束 ===")
+            return {}
 
 
 async def realtime_function_call(fc_info: RealtimeFunctionCallInfo,
                                  fallback_strategy: str = "full_content") -> Dict[str, Any]:
     """处理实时函数调用接口 - 优化版本：使用全局服务实例"""
-    logger.info("------------------start--------------------")
-    logger.info(
-        f"Received retrieval request: topic={fc_info.topic}, action={fc_info.action}, fallback={fallback_strategy}")
+    logger.info("==================== 函数调用开始 ====================")
+    logger.info(f"请求信息:")
+    logger.info(f"  - 主题 (topic): {fc_info.topic}")
+    logger.info(f"  - 动作 (action): {fc_info.action}")
+    logger.info(f"  - 回退策略 (fallback_strategy): {fallback_strategy}")
+
+    if fc_info.query:
+        logger.info(f"  - 查询信息:")
+        logger.info(f"    - 用户输入: '{fc_info.query.user_input}'")
+        logger.info(f"    - 函数名称: {fc_info.query.function_call_name}")
 
     try:
         # 使用全局服务实例（已预构建索引）
         service = get_service_instance()
 
         if fc_info.action == "startSession":
+            logger.info("执行启动会话操作")
             result = service.start_session(fc_info.topic)
             logger.info("Start session success")
+            logger.info("==================== 函数调用结束 ====================")
             return result
 
         elif fc_info.action == "getFunctionCallResult":
             if not fc_info.query:
-                logger.error("Must provide query parameter when getting function call result")
+                logger.error("获取函数调用结果时缺少query参数")
+                logger.info("==================== 函数调用异常结束 ====================")
                 return {}
 
+            logger.info("开始获取函数调用结果")
             result = await service.get_function_call_result(fc_info.query, fc_info.topic, fallback_strategy)
             logger.info("Get function call result success")
+            logger.info(f"返回结果键: {list(result.keys()) if result else 'Empty result'}")
+            logger.info("==================== 函数调用结束 ====================")
             return result
 
         else:
-            logger.error(f"Action error, undefined action: {fc_info.action}")
+            logger.error(f"未定义的动作: {fc_info.action}")
+            logger.info("==================== 函数调用异常结束 ====================")
             return {}
 
     except Exception as e:
-        logger.error(f"Error occurred while processing realtime function call: {str(e)}")
+        logger.error(f"处理实时函数调用时发生错误: {str(e)}", exc_info=True)
+        logger.info("==================== 函数调用异常结束 ====================")
         return {}
