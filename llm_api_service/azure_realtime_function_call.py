@@ -355,7 +355,7 @@ class OptimizedDenseRetriever:
             # 构建结果
             results = []
             for i, sim in enumerate(similarities):
-                if sim > 0.1:  # 过滤低相似度结果
+                if sim > 0.1:  # 过滤低相似度结果 ，相似度设置较低得到高召回
                     results.append({
                         'doc_id': i,
                         'score': float(sim),

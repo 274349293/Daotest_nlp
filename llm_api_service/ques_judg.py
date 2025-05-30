@@ -259,12 +259,14 @@ def ques_judgment(qj_info: QjInfo):
 
     if qj_info.type == 0:
         logger.info(f"question type is choice")
-        result = choice_question_judgment(qj_info.answer, qj_info.standardAnswer)
+        result = choice_question_judgment(qj_info.answer.replace(" ", ""), qj_info.standardAnswer.replace(" ", ""))
         return result
 
     elif qj_info.type == 1:
         logger.info(f"question type is fb")
-        result = fill_in_the_blanks(qj_info.answer, qj_info.standardAnswer, qj_info.question, qj_info.id)
+        result = fill_in_the_blanks(qj_info.answer.replace(" ", ""), qj_info.standardAnswer.replace(" ", ""),
+                                    qj_info.question,
+                                    qj_info.id)
         return result
 
     else:
