@@ -12,7 +12,15 @@ import jieba.analyse
 from collections import Counter
 
 logger = CustomLogger(name="DaoTest optimized retrieval api", write_to_file=True)
+"""
+Azure realtime 实时语音模型 function call 调用结果返回接口
+1.目前测试阶段支持两个topic：企业出海 和 汇仁培训
+2.新增config，所有配置文件均可在 utils/prompt.json文件中配置
 
+update:
+1.250519 新增新闻检索接口，触发后调用news.api去搜寻相关新闻，然后做summary返回
+
+"""
 # 新闻API配置
 NEWS_API_URL = "https://eventregistry.org/api/v1/article/getArticles"
 NEWS_API_KEY = "81299327-0db9-44f5-8c7c-f879c302fe8b"
