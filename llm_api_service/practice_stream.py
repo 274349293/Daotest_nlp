@@ -4,6 +4,16 @@ from pydantic import BaseModel
 from model.llm_service import LLMService
 from utils.nlp_logging import CustomLogger
 
+"""
+练习作答，回答为stream形式返回
+
+TODO
+1.250611 如果答案很短，类似填空题，打分和评价不准确，case:{'题目': 'LTC 团队进入作战室的情形包括:', '标准答案': '0.2', '员工作答': '0.2'}"} 
+  result is 0###你的作答与标准答案差距较大，请仔细回顾培训内容并重新作答。
+
+
+"""
+
 
 def get_prompt():
     with open('./utils/prompt.json', encoding='utf-8') as prompt:

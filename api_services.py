@@ -9,6 +9,7 @@ from llm_api_service.tag_generation import tag_generation, TagSet
 from llm_api_service.qa_generation import process_qa_generation, process_convenient_qa_generation, QaGeneration
 from llm_api_service.decompose_knowledge_point import decompose_knowledge_point, KnowledgePoint
 from llm_api_service.azure_realtime_function_call import realtime_function_call, RealtimeFunctionCallInfo
+from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDialogueInfo
 
 app = FastAPI()
 
@@ -24,6 +25,7 @@ app = FastAPI()
 8. decompose_knowledge 将整段的知识点拆分成若干个相对独立的知识点
 9. realtime_function_call 实时语音模型function call 结果返回(关键词检索）
 10. realtime_function_call_advanced 实时语音模型function call 结果返回(用户query检索）
+11. llm_chat 优化后的多轮对话接口，支持不同场景
 """
 
 
@@ -91,6 +93,11 @@ async def realtime_function_call_fun(fc_info: RealtimeFunctionCallInfo):
 @app.post("/realtime_function_call_advanced")
 async def realtime_function_call_advanced_fun(fc_info: RealtimeFunctionCallInfo):
     return await realtime_function_call(fc_info, "advanced_retrieval")
+
+
+@app.post("/llm_chat")
+async def llm_chat_fun(dialogue_info: OptimizedDialogueInfo):
+    return await optimized_multi_round_dialogue(dialogue_info)
 
 
 if __name__ == "__main__":
