@@ -3,7 +3,7 @@ import json
 from model.llm_service import LLMService
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 """
 优化后的多轮对话接口
@@ -15,6 +15,11 @@ from typing import List, Dict
 1. 支持多种场景，每种场景有固定的system prompt
 2. 入参结构优化，更清晰明确
 3. 保持原有的流式返回特性
+4. 新增case字段支持案例分析场景
+
+update:
+1. 新增case字段，用于案例分析对话场景
+2. 增强了prompt模板的动态插入功能
 """
 
 logger = CustomLogger(name="DaoTest llm chat api", write_to_file=True)
@@ -31,6 +36,7 @@ class OptimizedDialogueInfo(BaseModel):
     scene: int  # 0: 视频互动对话, 1: 案例分析对话
     question: str = ""  # 问题内容
     answer: str = ""  # 参考答案
+    case: str = ""  # 案例内容（新增字段，主要用于场景1）
     history: List[DialogueMessage]
 
 
@@ -44,8 +50,8 @@ def get_prompt_config():
         return {}
 
 
-def get_scene_system_prompt(scene: int, question: str = "", answer: str = "") -> str:
-    """根据场景获取对应的system prompt，并动态插入问题和答案"""
+def get_scene_system_prompt(scene: int, question: str = "", answer: str = "", case: str = "") -> str:
+    """根据场景获取对应的system prompt，并动态插入问题、答案和案例"""
     prompt_config = get_prompt_config()
     scene_prompts = prompt_config.get("llm_chat", {})
 
@@ -57,6 +63,15 @@ def get_scene_system_prompt(scene: int, question: str = "", answer: str = "") ->
         if scene == 0 and question and answer:
             system_prompt = system_prompt.replace("[question]", question)
             system_prompt = system_prompt.replace("[answer]", answer)
+
+        # 对于场景1（案例分析对话），需要插入案例、问题和答案
+        elif scene == 1:
+            if case:
+                system_prompt = system_prompt.replace("[case]", case)
+            if question:
+                system_prompt = system_prompt.replace("[question]", question)
+            if answer:
+                system_prompt = system_prompt.replace("[answer]", answer)
 
         return system_prompt
     else:
@@ -70,11 +85,12 @@ def process_dialogue_history(dialogue_info: OptimizedDialogueInfo) -> List[Dict[
     processed_history = []
 
     try:
-        # 获取场景对应的system prompt，并插入问题和答案
+        # 获取场景对应的system prompt，并插入问题、答案和案例
         scene_system_prompt = get_scene_system_prompt(
             dialogue_info.scene,
             dialogue_info.question,
-            dialogue_info.answer
+            dialogue_info.answer,
+            dialogue_info.case  # 新增案例参数
         )
 
         # 检查第一条消息是否为system消息
@@ -105,11 +121,36 @@ def process_dialogue_history(dialogue_info: OptimizedDialogueInfo) -> List[Dict[
                 })
 
         logger.info(f"Processed dialogue history successfully for scene {dialogue_info.scene}")
+
+        # log test
+        if dialogue_info.scene == 1:
+            logger.info(f"Case analysis dialogue - Case: {dialogue_info.case[:100]}...")
+            logger.info(f"Case analysis dialogue - Question: {dialogue_info.question}")
+            logger.info(f"Case analysis dialogue - Answer: {dialogue_info.answer[:100]}...")
+
         return processed_history
 
     except Exception as e:
         logger.error(f"Error processing dialogue history: {e}")
         return []
+
+
+def validate_dialogue_info(dialogue_info: OptimizedDialogueInfo) -> bool:
+    """验证对话信息的完整性"""
+    if dialogue_info.scene == 0:
+        # 视频互动对话需要question和answer
+        if not dialogue_info.question or not dialogue_info.answer:
+            logger.warning(
+                f"Scene 0 missing required fields - question: {bool(dialogue_info.question)}, answer: {bool(dialogue_info.answer)}")
+            return False
+    elif dialogue_info.scene == 1:
+        # 案例分析对话需要case、question和answer
+        if not dialogue_info.case or not dialogue_info.question or not dialogue_info.answer:
+            logger.warning(
+                f"Scene 1 missing required fields - case: {bool(dialogue_info.case)}, question: {bool(dialogue_info.question)}, answer: {bool(dialogue_info.answer)}")
+            return False
+
+    return True
 
 
 async def optimized_multi_round_dialogue(dialogue_info: OptimizedDialogueInfo):
@@ -142,9 +183,13 @@ async def optimized_multi_round_dialogue(dialogue_info: OptimizedDialogueInfo):
                 yield "data: [END]\n\n"
                 logger.error(f"yield [END], chat_gpt_4o_generate fun error : {e}")
 
-    logger.info("------------------optimized dialogue start--------------------")
+    logger.info("------------------llm chat start--------------------")
     logger.info(f"Dialogue ID: {dialogue_info.id}, Scene: {dialogue_info.scene}")
-    logger.info(f"Question: {dialogue_info.question}, Answer: {dialogue_info.answer}")
+
+    # 验证对话信息的完整性
+    if not validate_dialogue_info(dialogue_info):
+        logger.error(f"Dialogue info validation failed for {dialogue_info.id}")
+        return "error"
 
     # 处理对话历史
     processed_history = process_dialogue_history(dialogue_info)
