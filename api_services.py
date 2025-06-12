@@ -10,6 +10,7 @@ from llm_api_service.qa_generation import process_qa_generation, process_conveni
 from llm_api_service.decompose_knowledge_point import decompose_knowledge_point, KnowledgePoint
 from llm_api_service.azure_realtime_function_call import realtime_function_call, RealtimeFunctionCallInfo
 from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDialogueInfo
+from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
 
 app = FastAPI()
 
@@ -98,6 +99,12 @@ async def realtime_function_call_advanced_fun(fc_info: RealtimeFunctionCallInfo)
 @app.post("/llm_chat")
 async def llm_chat_fun(dialogue_info: OptimizedDialogueInfo):
     return await optimized_multi_round_dialogue(dialogue_info)
+
+
+@app.post("/chat_rating")
+def chat_rating_fun(rating_info: ChatRatingInfo):
+    result = chat_rating(rating_info)
+    return result
 
 
 if __name__ == "__main__":
