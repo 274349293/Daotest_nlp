@@ -47,7 +47,7 @@ def get_prompt_config():
 def get_scene_system_prompt(scene: int, question: str = "", answer: str = "") -> str:
     """根据场景获取对应的system prompt，并动态插入问题和答案"""
     prompt_config = get_prompt_config()
-    scene_prompts = prompt_config.get("optimized_multi_round_dialogue", {})
+    scene_prompts = prompt_config.get("llm_chat", {})
 
     scene_key = str(scene)
     if scene_key in scene_prompts:
