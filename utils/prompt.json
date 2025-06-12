@@ -46,7 +46,7 @@
           "parameters": {
             "type": "object",
             "properties": {
-              "keyword": {
+              "topic": {
                 "type": "string",
                 "description": "搜索关键词，例如'企业出海'、'中美贸易'、'人工智能'等"
               },
@@ -66,7 +66,7 @@
               }
             },
             "required": [
-              "keyword"
+              "topic"
             ]
           }
         }
