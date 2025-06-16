@@ -19,6 +19,7 @@ Azure realtime 实时语音模型 function call 调用结果返回接口
 
 update:
 1.250519 新增新闻检索接口，触发后调用news.api去搜寻相关新闻，然后做summary返回
+2.优化返回格式，统一使用固定的result字段作为主要内容返回
 
 """
 # 新闻API配置
@@ -79,7 +80,7 @@ def get_cached_model(model_type: str, model_name: str = None):
 class RetrievalConfig(BaseModel):
     """检索配置"""
     # 关键词匹配配置
-    enable_keyword_mapping: bool = True  # 新增：是否启用关键词映射快速通道
+    enable_keyword_mapping: bool = True
 
     # 查询理解配置
     enable_query_understanding: bool = True
@@ -89,11 +90,11 @@ class RetrievalConfig(BaseModel):
 
     # 检索策略配置
     enable_sparse_retrieval: bool = True
-    enable_dense_retrieval: bool = False  # 默认关闭，节省时间
-    enable_reranking: bool = False  # 默认关闭，节省时间
+    enable_dense_retrieval: bool = False
+    enable_reranking: bool = False
 
     # 失败回退策略
-    fallback_strategy: str = "full_content"  # "full_content" 或 "advanced_retrieval"
+    fallback_strategy: str = "full_content"
 
     rerank_model_name: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
 
@@ -104,9 +105,14 @@ class RetrievalConfig(BaseModel):
     top_k_candidates: int = 10
     final_top_k: int = 5
 
+    # ===== 新增：相似度阈值配置 =====
+    sparse_min_score: float = 1.0  # BM25最低分数阈值
+    dense_min_score: float = 0.5  # 密集检索最低相似度阈值（从0.3提高到0.5）
+    keyword_min_relevance: float = 0.5  # 关键词相关性最低阈值
+
     # 性能优化配置
     enable_async: bool = True
-    max_content_length: int = 1000  # 限制内容长度
+    max_content_length: int = 1000
     enable_caching: bool = True
 
 
@@ -277,7 +283,7 @@ class OptimizedSparseRetriever:
             title_matches = sum(1 for word in query_words if word in title)
             score += title_matches * 2.0
 
-            if score > 0:  # 只保留有分数的结果
+            if score >= self.config.sparse_min_score:  # 只保留有分数的结果
                 scores.append({
                     'doc_id': i,
                     'score': score,
@@ -363,7 +369,7 @@ class OptimizedDenseRetriever:
             # 构建结果
             results = []
             for i, sim in enumerate(similarities):
-                if sim > 0.1:  # 过滤低相似度结果 ，相似度设置较低得到高召回
+                if sim >= self.config.dense_min_score:  # 过滤低相似度结果 ，相似度设置较低得到高召回
                     results.append({
                         'doc_id': i,
                         'score': float(sim),
@@ -376,7 +382,8 @@ class OptimizedDenseRetriever:
 
             search_time = time.time() - start_time
             logger.info(f"Dense search completed in {search_time:.3f}s")
-
+            logger.info(
+                f"Dense search completed in {search_time:.3f}s, found {len(results)} results above threshold {self.config.dense_min_score}")
             return results[:top_k]
 
         except Exception as e:
@@ -393,6 +400,27 @@ class FastKnowledgeRetriever:
         self.is_indexed = False
         self.course_config = None
         self.documents = []
+
+    def _is_meaningless_input(self, query: str) -> bool:
+        """检查是否为无意义输入"""
+        # 检查是否只包含重复字符或无意义字符
+        meaningless_patterns = [
+            r'^[哈嘿呵嘻嗯哦啊呀哟额嗯]+$',  # 笑声或语气词
+            r'^[0-9]+$',  # 纯数字
+            r'^[a-zA-Z]{1,3}$',  # 单个或少数字母
+            r'^[\s\W]*$',  # 只有空格或特殊字符
+            r'^(.)\1{2,}$',  # 同一字符重复3次以上
+        ]
+
+        for pattern in meaningless_patterns:
+            if re.match(pattern, query):
+                return True
+
+        # 检查查询长度
+        if len(query) < 2:
+            return True
+
+        return False
 
     async def retrieve(self, query: str, top_k: int = None) -> Dict[str, Any]:
         """主检索方法 - 优化版本：移除了延迟构建逻辑"""
@@ -463,7 +491,9 @@ class FastKnowledgeRetriever:
         # 纯字符串处理
         query_lower = query.lower().strip()
         query_clean = re.sub(r'[啊哦呢吧呀？！。，、；："""''（）【】\s]', '', query_lower)
-
+        if self._is_meaningless_input(query_clean):
+            logger.info(f"Detected meaningless input: '{query}', skipping keyword mapping")
+            return None
         # 1. 完全匹配
         for key, mapped_topic in topic_mapping.items():
             key_lower = key.lower()
@@ -538,8 +568,19 @@ class FastKnowledgeRetriever:
         if all_candidates:
             final_results = sorted(all_candidates, key=lambda x: x['score'], reverse=True)[:top_k]
             best_result = final_results[0]
+            min_score_threshold = self.config.dense_min_score if best_result.get(
+                'source') == 'dense' else self.config.sparse_min_score
             total_time = time.time() - start_time
-
+            if best_result['score'] < min_score_threshold:
+                logger.info(f"Best result score {best_result['score']:.4f} below threshold {min_score_threshold}")
+                return {
+                    "matched": False,
+                    "topic": "",
+                    "content": "",
+                    "score": round(best_result.get('score', 0), 4),
+                    "message": f"No results above similarity threshold (score: {round(best_result['score'], 4)}, threshold: {min_score_threshold})",
+                    "retrieval_time": round(total_time, 3)
+                }
             logger.info(f"Advanced retrieval completed in {total_time:.3f}s")
 
             return {
@@ -1019,7 +1060,7 @@ class OptimizedRealtimeFunctionCallService:
 
     async def get_function_call_result(self, query: FunctionCallQuery, topic: str,
                                        fallback_strategy: str = "full_content") -> Dict[str, Any]:
-        """获取函数调用结果"""
+        """获取函数调用结果 - 优化返回格式"""
         logger.info(f"=== 开始处理函数调用 ===")
         logger.info(f"主题: {topic}")
         logger.info(f"回退策略: {fallback_strategy}")
@@ -1029,7 +1070,7 @@ class OptimizedRealtimeFunctionCallService:
         course_config = self.get_course_config(topic)
         if not course_config:
             logger.error(f"Course config not found for topic '{topic}'")
-            return {}
+            return {"result": "", "error": "Topic not found"}
 
         func_name = query.function_call_name
         user_input = query.user_input
@@ -1047,22 +1088,34 @@ class OptimizedRealtimeFunctionCallService:
 
                 # 调用新闻搜索函数
                 logger.info("开始调用新闻搜索API")
-                result = await get_latest_news(keyword, count=3, days=31)
-                logger.info(f"新闻搜索完成: success={result.get('success')}")
+                news_result = await get_latest_news(keyword, count=3, days=31)
+                logger.info(f"新闻搜索完成: success={news_result.get('success')}")
 
-                final_result = {func_name: result}
+                # 构建统一格式的返回结果
+                if news_result.get("success"):
+                    result_content = news_result.get("summary", "")
+                else:
+                    result_content = ""
+
+                final_result = {
+                    "result": result_content,
+                    func_name: news_result
+                }
                 logger.info(f"=== 新闻搜索函数调用完成 ===")
                 return final_result
 
             except Exception as e:
                 logger.error(f"新闻搜索函数调用异常: {str(e)}", exc_info=True)
-                error_result = {func_name: {
-                    "success": False,
-                    "keyword": user_input,
-                    "error": str(e),
-                    "summary": f"搜索新闻时发生错误: {str(e)}",
-                    "message": "新闻搜索功能暂时不可用"
-                }}
+                error_result = {
+                    "result": "",
+                    func_name: {
+                        "success": False,
+                        "keyword": user_input,
+                        "error": str(e),
+                        "summary": f"搜索新闻时发生错误: {str(e)}",
+                        "message": "新闻搜索功能暂时不可用"
+                    }
+                }
                 logger.info(f"=== 新闻搜索函数调用异常结束 ===")
                 return error_result
 
@@ -1075,26 +1128,36 @@ class OptimizedRealtimeFunctionCallService:
             retriever = self.get_or_create_retriever(topic, course_config, fallback_strategy)
             if not retriever:
                 logger.error("检索器获取失败")
-                return {}
+                return {"result": "", "error": "Retriever not available"}
 
             # 执行检索
             logger.info("开始执行知识检索")
-            result = await retriever.retrieve(user_input)
-            logger.info(f"知识检索完成: matched={result.get('matched')}, topic='{result.get('topic')}'")
+            knowledge_result = await retriever.retrieve(user_input)
+            logger.info(
+                f"知识检索完成: matched={knowledge_result.get('matched')}, topic='{knowledge_result.get('topic')}'")
 
-            final_result = {func_name: result}
+            # 构建统一格式的返回结果
+            if knowledge_result.get("matched") or knowledge_result.get("content"):
+                result_content = knowledge_result.get("content", "")
+            else:
+                result_content = ""
+
+            final_result = {
+                "result": result_content,
+                func_name: knowledge_result
+            }
             logger.info(f"=== 培训知识检索函数调用完成 ===")
             return final_result
 
         else:
             logger.error(f"Unknown function call: {func_name}")
             logger.info(f"=== 未知函数调用结束 ===")
-            return {}
+            return {"result": "", "error": f"Unknown function: {func_name}"}
 
 
 async def realtime_function_call(fc_info: RealtimeFunctionCallInfo,
                                  fallback_strategy: str = "full_content") -> Dict[str, Any]:
-    """处理实时函数调用接口 - 优化版本：使用全局服务实例"""
+    """处理实时函数调用接口 - 优化版本：使用全局服务实例，返回统一格式"""
     logger.info("==================== 函数调用开始 ====================")
     logger.info(f"请求信息:")
     logger.info(f"  - 主题 (topic): {fc_info.topic}")
@@ -1121,21 +1184,21 @@ async def realtime_function_call(fc_info: RealtimeFunctionCallInfo,
             if not fc_info.query:
                 logger.error("获取函数调用结果时缺少query参数")
                 logger.info("==================== 函数调用异常结束 ====================")
-                return {}
+                return {"result": "", "error": "Missing query parameter"}
 
             logger.info("开始获取函数调用结果")
             result = await service.get_function_call_result(fc_info.query, fc_info.topic, fallback_strategy)
             logger.info("Get function call result success")
-            logger.info(f"返回结果键: {list(result.keys()) if result else 'Empty result'}")
+            logger.info(f"返回结果包含result字段: {bool(result.get('result'))}")
             logger.info("==================== 函数调用结束 ====================")
             return result
 
         else:
             logger.error(f"未定义的动作: {fc_info.action}")
             logger.info("==================== 函数调用异常结束 ====================")
-            return {}
+            return {"result": "", "error": f"Unknown action: {fc_info.action}"}
 
     except Exception as e:
         logger.error(f"处理实时函数调用时发生错误: {str(e)}", exc_info=True)
         logger.info("==================== 函数调用异常结束 ====================")
-        return {}
+        return {"result": "", "error": f"Internal error: {str(e)}"}
