@@ -11,6 +11,7 @@ from llm_api_service.decompose_knowledge_point import decompose_knowledge_point,
 from llm_api_service.azure_realtime_function_call import realtime_function_call, RealtimeFunctionCallInfo
 from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDialogueInfo
 from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
+from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 
 app = FastAPI()
 
@@ -27,6 +28,7 @@ app = FastAPI()
 9. realtime_function_call 实时语音模型function call 结果返回(关键词检索）
 10. realtime_function_call_advanced 实时语音模型function call 结果返回(用户query检索）
 11. llm_chat 优化后的多轮对话接口，支持不同场景
+12. golf_llm 高尔夫相关问题的智能回复接口
 """
 
 
@@ -105,6 +107,11 @@ async def llm_chat_fun(dialogue_info: OptimizedDialogueInfo):
 def chat_rating_fun(rating_info: ChatRatingInfo):
     result = chat_rating(rating_info)
     return result
+
+
+@app.post("/golf_llm")
+async def golf_llm_fun(golf_info: GolfLLMInfo):
+    return await golf_llm_chat(golf_info)
 
 
 if __name__ == "__main__":
