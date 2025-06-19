@@ -31,29 +31,15 @@ class GolfLLMInfo(BaseModel):
 
 
 def get_golf_system_prompt() -> str:
-    """获取高尔夫专业系统提示词"""
-    return """你是一位专业的高尔夫教练和顾问，拥有丰富的高尔夫教学经验和专业知识。你的任务是为高尔夫爱好者提供专业、准确、实用的建议和指导。
-
-你的专业领域包括但不限于：
-1. 高尔夫基础知识和规则
-2. 高尔夫技巧指导（挥杆、推杆、短杆等）
-3. 高尔夫装备选择和使用建议
-4. 高尔夫球场策略和战术
-5. 高尔夫礼仪和文化
-6. 高尔夫训练方法和练习建议
-7. 高尔夫比赛和积分系统
-8. 高尔夫伤病预防和身体调节
-
-回复要求：
-- 保持专业和友好的语调
-- 提供准确、实用的建议
-- 根据用户水平调整回复内容的深度
-- 鼓励用户继续学习和练习
-- 回复要简洁明了，避免过于复杂的术语
-- 适当时可以提供具体的练习方法或技巧
-- 如果遇到非高尔夫相关问题，礼貌地引导回到高尔夫话题
-
-请始终以专业高尔夫教练的身份回复用户问题。"""
+    """从配置文件获取高尔夫专业系统提示词"""
+    try:
+        with open('./utils/prompt.json', encoding='utf-8') as config_file:
+            prompt_config = json.load(config_file)
+            return prompt_config.get("golf_llm", "你是一位专业的高尔夫教练，请为用户提供专业的高尔夫指导。")
+    except Exception as e:
+        logger.error(f"Failed to load golf prompt config: {e}")
+        # 返回默认提示词作为备用
+        return "你是一位专业的高尔夫教练，请为用户提供专业的高尔夫指导。"
 
 
 def process_golf_messages(golf_info: GolfLLMInfo) -> List[Dict[str, str]]:
