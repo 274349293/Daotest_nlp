@@ -10,7 +10,7 @@
     "api_version": "2025-01-01-preview"
   },
   "qwen": {
-    "api_key": "sk-824ae94382af45a9857c20853793dcbb",
+    "api_key": "sk-sk-535d2351d0884ca4be9fe45dc86ff0f0",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "model_name_list": [
       "qwen-long",
@@ -24,15 +24,15 @@
     ]
   },
   "kimi": {
-    "api_key": "sk-gl5n4T1iBsCcDGhl7r61T9dZdK1JLg4h3Tjb0WINONfVGSGR",
+    "api_key": "",
     "base_url": "https://api.moonshot.cn/v1",
     "model_name_list": [
       "moonshot-v1-8k"
     ]
   },
   "wenxin": {
-    "api_key": "qGmPd8UlxI6xfGeTry7Sw5bL",
-    "secret_key": "j6n6MzEuGQSFG5OgIjnOtWGxPGaPn9Yh",
+    "api_key": "",
+    "secret_key": "",
     "model_name_list": [
       "ERNIE-4.0-8K"
     ]
