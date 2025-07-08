@@ -10,7 +10,7 @@
     "api_version": "2025-01-01-preview"
   },
   "qwen": {
-    "api_key": "sk-sk-535d2351d0884ca4be9fe45dc86ff0f0",
+    "api_key": "sk-535d2351d0884ca4be9fe45dc86ff0f0",
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "model_name_list": [
       "qwen-long",
