@@ -14,6 +14,8 @@ from typing import List, Dict
 2. 基于对话历史提供专业的高尔夫知识回复
 3. 支持多轮对话
 4. 流式返回，提升用户体验
+
+update0724 口语化回复优化，多模型备用
 """
 
 logger = CustomLogger(name="Golf LLM API", write_to_file=True)
