@@ -15,7 +15,7 @@ from typing import List, Dict
 3. 支持多轮对话
 4. 流式返回，提升用户体验
 
-update0724 口语化回复优化，多模型备用
+update0724 口语化回复优化，多模型api备用
 """
 
 logger = CustomLogger(name="Golf LLM API", write_to_file=True)
@@ -109,10 +109,9 @@ def validate_golf_info(golf_info: GolfLLMInfo) -> bool:
 
 
 async def golf_llm_chat(golf_info: GolfLLMInfo):
-    """高尔夫LLM聊天主函数，支持流式返回"""
+    """高尔夫LLM聊天主函数，支持流式返回，新增备用模型支持"""
 
-    def qwen_generate():
-        """千问模型流式生成器"""
+    def qwen_generate() -> bytes:
         for chunk in completion:
             try:
                 chunk_content = f"data: {json.loads(chunk.model_dump_json())['choices'][0]['delta']['content']}\n\n"
@@ -121,8 +120,7 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
                 yield "data: [END]\n\n"
                 logger.info(f"yield [END], qwen chunk is None, {e}")
 
-    def chat_gpt_4o_generate():
-        """GPT-4o模型流式生成器"""
+    def chat_gpt_4o_generate() -> bytes:
         llm_resp = ""
         for chunk in completion:
             try:
@@ -139,6 +137,18 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
             except Exception as e:
                 yield "data: [END]\n\n"
                 logger.error(f"yield [END], chat_gpt_4o_generate fun error : {e}")
+
+    def wenxin_generate() -> bytes:
+        for chunk in completion:
+            try:
+                if chunk['body']['is_end'] is True:
+                    yield "data: [END]\n\n"
+                else:
+                    chunk_content = f"data: {chunk['body']['result']}\n\n"
+                    yield chunk_content
+            except Exception as e:
+                yield "data: [END]\n\n"
+                logger.error(f"yield [END], wenxin chunk is error, {e}")
 
     logger.info("------------------golf llm chat start--------------------")
     logger.info(f"Golf Chat ID: {golf_info.id}")
@@ -162,6 +172,7 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
         try:
             completion = llm.get_response_stream(model_name=model_name, messages=processed_history)
             if completion is None:
+                logger.warning(f"{model_name} returned None, trying next model")
                 continue
 
             logger.info(f"{golf_info.id} model name is {model_name}, get stream completion success")
@@ -170,9 +181,13 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
                 return StreamingResponse(chat_gpt_4o_generate(), media_type="text/event-stream")
             elif model_name == 'qwen-max':
                 return StreamingResponse(qwen_generate(), media_type="text/event-stream")
+            elif model_name == 'ERNIE-4.0-8K':
+                return StreamingResponse(wenxin_generate(), media_type="text/event-stream")
 
         except Exception as e:
             logger.error(f"golf llm chat error in {model_name}: {e}")
+            # 继续尝试下一个模型，不直接返回错误
 
-    logger.error(f"{golf_info.id} golf llm chat api return failed, return is error")
+    # 所有模型都失败时才返回错误
+    logger.error(f"{golf_info.id} golf llm chat api return failed - all models exhausted, return is error")
     return "error"
