@@ -11,7 +11,7 @@ class LLMService:
     def __init__(self, llm_logger=CustomLogger()):
         self.logger = llm_logger
         self.config = self.get_config()
-        self.model_dict = {"gpt-4o", "qwen-max", "ERNIE-4.0-8K", "gpt-4o-mini"}
+        self.model_dict = {"gpt-4o", "qwen-max", "ERNIE-4.0-8K", "gpt-4o-mini", "deepseek-chat"}
 
     @staticmethod
     def get_config():
@@ -51,6 +51,43 @@ class LLMService:
             return completion
         except Exception as e:
             self.logger.error(f"qwen stream response error: {e}")
+            return None
+
+    def deepseek_response(self, model_name="deepseek-chat", message=None):
+        """DeepSeek API 调用方法 - 非流式"""
+        client = OpenAI(
+            api_key=self.config['deepseek']['api_key'],
+            base_url=self.config['deepseek']['base_url'],
+        )
+        try:
+            completion = client.chat.completions.create(
+                temperature=0.05,
+                model=model_name,
+                messages=message,
+                stream=False,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(completion.model_dump_json())['choices'][0]['message']['content']
+        except Exception as e:
+            self.logger.error(f"deepseek response error: {e}")
+            return None
+
+    def deepseek_response_stream(self, model_name="deepseek-chat", message=None):
+        """DeepSeek API 调用方法 - 流式"""
+        client = OpenAI(
+            api_key=self.config['deepseek']['api_key'],
+            base_url=self.config['deepseek']['base_url'],
+        )
+        try:
+            completion = client.chat.completions.create(
+                model=model_name,
+                messages=message,
+                stream=True,
+                stream_options={"include_usage": True}
+            )
+            return completion
+        except Exception as e:
+            self.logger.error(f"deepseek stream response error: {e}")
             return None
 
     def chatgpt_4o_response(self, model_name="gpt-4o", message=None):
@@ -114,8 +151,6 @@ class LLMService:
                     stop=None,
                     messages=llm_message,
                     stream=True)
-
-                # res_content = response.choices[0].message.content.strip().rstrip("<|im_end|>")
 
                 return response
             except Exception as e:
@@ -192,8 +227,6 @@ class LLMService:
                     messages=llm_message,
                     stream=True)
 
-                # res_content = response.choices[0].message.content.strip().rstrip("<|im_end|>")
-
                 return response
             except Exception as e:
                 self.logger.error(f"chatgpt 4o mini response_stream error: {e}, retry num is {retry_count}")
@@ -235,7 +268,7 @@ class LLMService:
 
     def get_response(self, model_name=None, messages=None):
         """
-        :param model_name: {"gpt-4o","qwen-max"}
+        :param model_name: {"gpt-4o","qwen-max","deepseek-chat"}
         :param stream: Ture or False
         :return: response str
         """
@@ -255,6 +288,8 @@ class LLMService:
                 return self.chatgpt_4o_mini_response(model_name=model_name, message=message)
             elif model_name == "qwen-max":
                 return self.qwen_response(model_name=model_name, message=message)
+            elif model_name in ["deepseek-chat"]:
+                return self.deepseek_response(model_name=model_name, message=message)
             elif model_name == "ERNIE-4.0-8K":
                 return self.wenxin_response(model_name=model_name, message=message)
             else:
@@ -284,6 +319,8 @@ class LLMService:
                 return self.chatgpt_4o_mini_response_stream(model_name=model_name, message=message)
             elif model_name == "qwen-max":
                 return self.qwen_response_stream(model_name=model_name, message=message)
+            elif model_name in ["deepseek-chat"]:
+                return self.deepseek_response_stream(model_name=model_name, message=message)
             elif model_name == "ERNIE-4.0-8K":
                 return self.wenxin_response_stream(model_name=model_name, message=message)
             else:

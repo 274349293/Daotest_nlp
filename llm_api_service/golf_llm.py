@@ -167,8 +167,7 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
 
     logger.info(f"Processed history length: {len(processed_history)}")
 
-    # 按优先级尝试不同模型
-    for model_name in ['gpt-4o', 'gpt-4o-mini', 'qwen-max']:
+    for model_name in ['gpt-4o', 'gpt-4o-mini', 'qwen-max', 'deepseek-chat']:
         try:
             completion = llm.get_response_stream(model_name=model_name, messages=processed_history)
             if completion is None:
@@ -177,7 +176,7 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
 
             logger.info(f"{golf_info.id} model name is {model_name}, get stream completion success")
 
-            if model_name in ['gpt-4o', 'gpt-4o-mini']:
+            if model_name in ['gpt-4o', 'gpt-4o-mini', 'deepseek-chat']:
                 return StreamingResponse(chat_gpt_4o_generate(), media_type="text/event-stream")
             elif model_name == 'qwen-max':
                 return StreamingResponse(qwen_generate(), media_type="text/event-stream")
