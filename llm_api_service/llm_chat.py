@@ -20,6 +20,7 @@ from typing import List, Dict, Optional
 update:
 1. 新增case字段，用于案例分析对话场景
 2. 增强了prompt模板的动态插入功能
+3. 0730 取消markdown形式
 """
 
 logger = CustomLogger(name="DaoTest llm chat api", write_to_file=True)
