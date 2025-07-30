@@ -1,5 +1,6 @@
 from fastapi.responses import StreamingResponse
 import json
+import re
 from model.llm_service import LLMService
 from pydantic import BaseModel
 from utils.nlp_logging import CustomLogger
@@ -20,7 +21,7 @@ from typing import List, Dict, Optional
 update:
 1. 新增case字段，用于案例分析对话场景
 2. 增强了prompt模板的动态插入功能
-3. 0730 取消markdown形式
+3. 0730 添加Markdown格式清理功能
 """
 
 logger = CustomLogger(name="DaoTest llm chat api", write_to_file=True)
@@ -39,6 +40,37 @@ class OptimizedDialogueInfo(BaseModel):
     answer: str = ""  # 参考答案
     case: str = ""  # 案例内容（新增字段，主要用于场景1）
     history: List[DialogueMessage]
+
+
+def clean_markdown(text: str) -> str:
+    """清理文本中的 Markdown 格式符号，保持良好的可读性"""
+    if not text:
+        return text
+
+    # 移除粗体标记 **text** 和 *text*
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+
+    # 处理列表项：- **item**: content -> item：content
+    text = re.sub(r'^[\s]*-[\s]*\*\*(.*?)\*\*[:：]?[\s]*', r'\1：', text, flags=re.MULTILINE)
+    text = re.sub(r'^[\s]*-[\s]*(.*?)[:：]?[\s]*', r'\1：', text, flags=re.MULTILINE)
+
+    # 移除标题标记
+    text = re.sub(r'^#{1,6}\s*(.*?)$', r'\1', text, flags=re.MULTILINE)
+
+    # 移除代码块标记
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+
+    # 移除其他 Markdown 符号但保持结构
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)  # 链接
+    text = re.sub(r'>\s*(.*?)$', r'\1', text, flags=re.MULTILINE)  # 引用
+
+    # 清理多余的空行，但保留必要的换行
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+
+    return text
 
 
 def get_prompt_config():
@@ -160,7 +192,10 @@ async def optimized_multi_round_dialogue(dialogue_info: OptimizedDialogueInfo):
     def qwen_generate() -> bytes:
         for chunk in completion:
             try:
-                chunk_content = f"data: {json.loads(chunk.model_dump_json())['choices'][0]['delta']['content']}\n\n"
+                content = json.loads(chunk.model_dump_json())['choices'][0]['delta']['content']
+                # 清理 Markdown 格式
+                cleaned_content = clean_markdown(content)
+                chunk_content = f"data: {cleaned_content}\n\n"
                 yield chunk_content
             except Exception as e:
                 yield "data: [END]\n\n"
@@ -177,7 +212,10 @@ async def optimized_multi_round_dialogue(dialogue_info: OptimizedDialogueInfo):
                     logger.info(f"yield [END], chatgpt chunk is None, result is {llm_resp}")
                     yield "data: [END]\n\n"
                 else:
-                    chunk_content = f"data: {chunk.choices[0].delta.content}\n\n"
+                    content = chunk.choices[0].delta.content
+                    # 清理 Markdown 格式
+                    cleaned_content = clean_markdown(content)
+                    chunk_content = f"data: {cleaned_content}\n\n"
                     llm_resp = llm_resp + chunk_content
                     yield chunk_content
             except Exception as e:
