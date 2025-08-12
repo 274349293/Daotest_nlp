@@ -136,108 +136,12 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
     def qwen_generate() -> bytes:
         buffer = ""
         full_response = ""
+        end_sent = False  # 添加标志位防止重复发送[END]
 
-        for chunk in completion:
-            try:
-                content = json.loads(chunk.model_dump_json())['choices'][0]['delta']['content']
-                buffer += content
-                full_response += content
-
-                # 检查buffer中是否有完整的句子
-                complete_sentences, new_buffer = check_sentence_complete(buffer)
-
-                # 立即发送所有完整的句子
-                if complete_sentences:
-                    for sentence in complete_sentences:
-                        if sentence.strip():
-                            chunk_content = f"data: {sentence}\n\n"
-                            yield chunk_content
-
-                    # 更新buffer为剩余内容
-                    buffer = new_buffer
-
-            except Exception as e:
-                # 发送剩余内容并结束
-                if buffer.strip():
-                    yield f"data: {buffer}\n\n"
-                logger.info(f"Complete model response: {full_response}")
-                yield "data: [END]\n\n"
-                logger.info(f"yield [END], qwen chunk error: {e}")
-                return
-
-        # 发送最后的buffer内容（可能是不完整的句子）
-        if buffer.strip():
-            yield f"data: {buffer}\n\n"
-
-        # 记录完整的模型回复
-        logger.info(f"Complete model response: {full_response}")
-        yield "data: [END]\n\n"
-
-    def chat_gpt_4o_generate() -> bytes:
-        buffer = ""
-        full_response = ""
-
-        for chunk in completion:
-            try:
-                if len(chunk.choices) == 0:
-                    continue
-
-                if chunk.choices[0].delta.content is None:
-                    # 流结束，发送剩余内容
-                    if buffer.strip():
-                        yield f"data: {buffer}\n\n"
-
-                    # 记录完整的模型回复
-                    logger.info(f"Complete model response: {full_response}")
-                    yield "data: [END]\n\n"
-                    logger.info(f"yield [END], chatgpt stream completed")
-                    return
-                else:
-                    content = chunk.choices[0].delta.content
-                    buffer += content
-                    full_response += content
-
-                    # 检查buffer中是否有完整的句子
-                    complete_sentences, new_buffer = check_sentence_complete(buffer)
-
-                    if complete_sentences:
-                        # 立即发送所有完整的句子
-                        for sentence in complete_sentences:
-                            if sentence.strip():
-                                chunk_content = f"data: {sentence}\n\n"
-                                yield chunk_content
-
-                        # 更新buffer为剩余内容
-                        buffer = new_buffer
-
-            except Exception as e:
-                # 发送剩余内容并结束
-                if buffer.strip():
-                    yield f"data: {buffer}\n\n"
-
-                # 记录完整的模型回复
-                logger.info(f"Complete model response: {full_response}")
-                yield "data: [END]\n\n"
-                logger.error(f"yield [END], chat_gpt_4o_generate error: {e}")
-                return
-
-    def wenxin_generate() -> bytes:
-        buffer = ""
-        full_response = ""
-
-        for chunk in completion:
-            try:
-                if chunk['body']['is_end'] is True:
-                    # 发送剩余内容并结束
-                    if buffer.strip():
-                        yield f"data: {buffer}\n\n"
-
-                    # 记录完整的模型回复
-                    logger.info(f"Complete model response: {full_response}")
-                    yield "data: [END]\n\n"
-                    return
-                else:
-                    content = chunk['body']['result']
+        try:
+            for chunk in completion:
+                try:
+                    content = json.loads(chunk.model_dump_json())['choices'][0]['delta']['content']
                     buffer += content
                     full_response += content
 
@@ -254,16 +158,113 @@ async def golf_llm_chat(golf_info: GolfLLMInfo):
                         # 更新buffer为剩余内容
                         buffer = new_buffer
 
-            except Exception as e:
-                # 发送剩余内容并结束
-                if buffer.strip():
-                    yield f"data: {buffer}\n\n"
+                except Exception as e:
+                    logger.error(f"qwen chunk processing error: {e}")
+                    break
 
-                # 记录完整的模型回复
+            # 发送最后的buffer内容（可能是不完整的句子）
+            if buffer.strip():
+                yield f"data: {buffer}\n\n"
+
+        except Exception as e:
+            logger.error(f"qwen_generate error: {e}")
+        finally:
+            # 确保只发送一次[END]
+            if not end_sent:
                 logger.info(f"Complete model response: {full_response}")
                 yield "data: [END]\n\n"
-                logger.error(f"yield [END], wenxin error: {e}")
-                return
+                end_sent = True
+
+    def chat_gpt_4o_generate() -> bytes:
+        buffer = ""
+        full_response = ""
+        end_sent = False  # 添加标志位防止重复发送[END]
+
+        try:
+            for chunk in completion:
+                try:
+                    if len(chunk.choices) == 0:
+                        continue
+
+                    if chunk.choices[0].delta.content is None:
+                        # 流正常结束，发送剩余内容
+                        if buffer.strip():
+                            yield f"data: {buffer}\n\n"
+                        break
+                    else:
+                        content = chunk.choices[0].delta.content
+                        buffer += content
+                        full_response += content
+
+                        # 检查buffer中是否有完整的句子
+                        complete_sentences, new_buffer = check_sentence_complete(buffer)
+
+                        if complete_sentences:
+                            # 立即发送所有完整的句子
+                            for sentence in complete_sentences:
+                                if sentence.strip():
+                                    chunk_content = f"data: {sentence}\n\n"
+                                    yield chunk_content
+
+                            # 更新buffer为剩余内容
+                            buffer = new_buffer
+
+                except Exception as e:
+                    logger.error(f"chat_gpt_4o chunk processing error: {e}")
+                    break
+
+        except Exception as e:
+            logger.error(f"chat_gpt_4o_generate error: {e}")
+        finally:
+            # 确保只发送一次[END]
+            if not end_sent:
+                logger.info(f"Complete model response: {full_response}")
+                yield "data: [END]\n\n"
+                end_sent = True
+
+    def wenxin_generate() -> bytes:
+        buffer = ""
+        full_response = ""
+        end_sent = False  # 添加标志位防止重复发送[END]
+
+        try:
+            for chunk in completion:
+                try:
+                    if chunk['body']['is_end'] is True:
+                        # 发送剩余内容并结束
+                        if buffer.strip():
+                            yield f"data: {buffer}\n\n"
+                        break
+                    else:
+                        content = chunk['body']['result']
+                        buffer += content
+                        full_response += content
+
+                        # 检查buffer中是否有完整的句子
+                        complete_sentences, new_buffer = check_sentence_complete(buffer)
+
+                        # 立即发送所有完整的句子
+                        if complete_sentences:
+                            for sentence in complete_sentences:
+                                if sentence.strip():
+                                    chunk_content = f"data: {sentence}\n\n"
+                                    yield chunk_content
+
+                            # 更新buffer为剩余内容
+                            buffer = new_buffer
+
+                except Exception as e:
+                    logger.error(f"wenxin chunk processing error: {e}")
+                    break
+
+        except Exception as e:
+            logger.error(f"wenxin_generate error: {e}")
+        finally:
+            # 确保只发送一次[END]
+            if not end_sent:
+                logger.info(f"Complete model response: {full_response}")
+                yield "data: [END]\n\n"
+                end_sent = True
 
     logger.info("------------------golf llm chat start--------------------")
     logger.info(f"Golf Chat ID: {golf_info.id}")
