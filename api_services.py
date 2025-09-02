@@ -12,6 +12,7 @@ from llm_api_service.azure_realtime_function_call import realtime_function_call,
 from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDialogueInfo
 from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
 from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
+from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
 
 app = FastAPI()
 
@@ -29,6 +30,7 @@ app = FastAPI()
 10. realtime_function_call_advanced 实时语音模型function call 结果返回(用户query检索）
 11. llm_chat 优化后的多轮对话接口，支持不同场景
 12. golf_llm 高尔夫相关问题的智能回复接口
+13. three_point_las_vegas 高尔夫赌球游戏 拉丝3点
 """
 
 
@@ -112,6 +114,12 @@ def chat_rating_fun(rating_info: ChatRatingInfo):
 @app.post("/golf_llm")
 async def golf_llm_fun(golf_info: GolfLLMInfo):
     return await golf_llm_chat(golf_info)
+
+
+@app.post("/lasi_scoring")
+def lasi_scoring_fun(game_data: LaSiGameData):
+    result = calculate_lasi_score(game_data)
+    return result
 
 
 if __name__ == "__main__":
