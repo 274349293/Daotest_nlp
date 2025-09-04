@@ -5,19 +5,12 @@ from pydantic import BaseModel, Field
 from utils.nlp_logging import CustomLogger
 
 """
-拉丝三点高尔夫赌球游戏计分接口
-实现完整的拉丝三点游戏计分逻辑，包括：
-- 固拉/乱拉两种模式
-- 三项比较计分（最好/最差/总分）
-- 鸟鹰基础分数和额外奖励系统
-- 双杀奖励机制
-- 平洞累积和收取规则
-- 包赔规则判定和分数重分配
-- 复杂让杆规则和条件限制
-- 捐锅和让分最终结算
+更新版拉丝三点高尔夫赌球游戏计分接口
+新增功能：
+- 组合PK模式选择（相加/相乘）
+- 乱拉模式高手不见面设置
+- 完善的队伍配对逻辑
 
-Author: Assistant
-Date: 2025-01-21
 """
 
 logger = CustomLogger(name="DaoTest 3-Point Las Vegas api", write_to_file=True)
@@ -44,6 +37,17 @@ class DialogueMessage(BaseModel):
 class GameConfig(BaseModel):
     mode: str = Field(..., description="游戏模式: 固拉 | 乱拉")
     base_score: int = Field(default=1, description="基础分")
+
+    # 新增：组合PK配置
+    combination_pk_config: Dict[str, str] = Field(default_factory=lambda: {
+        "mode": "双方总杆相加PK"  # "双方总杆相加PK" | "双方总杆相乘PK"
+    })
+
+    # 新增：高手不见面配置（仅乱拉模式）
+    expert_separation_config: Dict[str, Any] = Field(default_factory=lambda: {
+        "enabled": False,  # 是否启用高手不见面
+        "expert_players": []  # 高手玩家ID列表，必须2人
+    })
 
     double_kill_config: Dict[str, Any] = Field(default_factory=lambda: {"type": "不奖励"})
 
@@ -173,6 +177,22 @@ class LaSiThreePointAPI:
                     self.logger.error("固拉模式缺少队伍配置")
                     return False
 
+            # 验证乱拉模式的高手不见面配置
+            if game_data.game_config.mode == "乱拉":
+                expert_config = game_data.game_config.expert_separation_config
+                if expert_config.get("enabled", False):
+                    expert_players = expert_config.get("expert_players", [])
+                    if len(expert_players) != 2:
+                        self.logger.error("高手不见面模式必须选择2名高手")
+                        return False
+
+                    # 验证高手玩家ID是否存在
+                    player_ids = [p.id for p in game_data.players]
+                    for expert_id in expert_players:
+                        if expert_id not in player_ids:
+                            self.logger.error(f"高手玩家ID不存在: {expert_id}")
+                            return False
+
             # 验证洞次数据
             if not game_data.holes:
                 self.logger.error("缺少洞次数据")
@@ -264,24 +284,8 @@ class LaSiThreePointAPI:
                 }
                 teams.append(team_data)
         else:
-            # 乱拉模式：根据开球顺序配对
-            tee_order = hole.tee_order
-            teams = [
-                {
-                    "team_id": 1,
-                    "team_players": [tee_order[0], tee_order[3]],  # 第1和第4
-                    "raw_scores": [],
-                    "handicaps": [],
-                    "net_scores": []
-                },
-                {
-                    "team_id": 2,
-                    "team_players": [tee_order[1], tee_order[2]],  # 第2和第3
-                    "raw_scores": [],
-                    "handicaps": [],
-                    "net_scores": []
-                }
-            ]
+            # 乱拉模式：根据开球顺序和高手不见面规则配对
+            teams = self._determine_luanla_teams(hole, game_data)
 
         # 填充杆数数据
         score_map = {score.player_id: score.raw_strokes for score in hole.scores}
@@ -292,6 +296,72 @@ class LaSiThreePointAPI:
                 team["raw_scores"].append(raw_score)
 
         return teams
+
+    def _determine_luanla_teams(self, hole: Hole, game_data: LaSiGameData) -> List[Dict[str, Any]]:
+        """确定乱拉模式的队伍配对"""
+        tee_order = hole.tee_order
+        expert_config = game_data.game_config.expert_separation_config
+
+        if expert_config.get("enabled", False):
+            # 高手不见面模式
+            expert_players = expert_config.get("expert_players", [])
+
+            # 验证高手是否都在开球顺序中
+            if not all(expert in tee_order for expert in expert_players):
+                self.logger.warning("高手玩家不在开球顺序中，使用默认配对")
+                return self._default_luanla_pairing(tee_order)
+
+            # 确保高手分在不同队伍
+            expert1, expert2 = expert_players[0], expert_players[1]
+            other_players = [p for p in tee_order if p not in expert_players]
+
+            # 将高手分别放在队伍1和队伍2
+            team1_players = [expert1, other_players[0]]
+            team2_players = [expert2, other_players[1]]
+
+            teams = [
+                {
+                    "team_id": 1,
+                    "team_players": team1_players,
+                    "raw_scores": [],
+                    "handicaps": [],
+                    "net_scores": []
+                },
+                {
+                    "team_id": 2,
+                    "team_players": team2_players,
+                    "raw_scores": [],
+                    "handicaps": [],
+                    "net_scores": []
+                }
+            ]
+
+            self.logger.info(f"高手不见面配对: 队伍1 {team1_players}, 队伍2 {team2_players}")
+
+        else:
+            # 默认乱拉配对：第1&第4 vs 第2&第3
+            teams = self._default_luanla_pairing(tee_order)
+
+        return teams
+
+    def _default_luanla_pairing(self, tee_order: List[str]) -> List[Dict[str, Any]]:
+        """默认乱拉配对模式"""
+        return [
+            {
+                "team_id": 1,
+                "team_players": [tee_order[0], tee_order[3]],  # 第1和第4
+                "raw_scores": [],
+                "handicaps": [],
+                "net_scores": []
+            },
+            {
+                "team_id": 2,
+                "team_players": [tee_order[1], tee_order[2]],  # 第2和第3
+                "raw_scores": [],
+                "handicaps": [],
+                "net_scores": []
+            }
+        ]
 
     def _calculate_net_scores(self, hole: Hole, game_data: LaSiGameData, teams: List[Dict[str, Any]]) -> Dict[
         str, float]:
@@ -316,11 +386,17 @@ class LaSiThreePointAPI:
                 team["net_scores"].append(net_score)
                 net_scores[player_id] = net_score
 
-        # 计算队伍统计
+        # 计算队伍统计（根据组合PK模式）
         for team in teams:
             team["best_score"] = min(team["net_scores"])
             team["worst_score"] = max(team["net_scores"])
-            team["total_score"] = sum(team["net_scores"])
+
+            # 根据组合PK配置计算总分
+            combination_mode = game_data.game_config.combination_pk_config.get("mode", "双方总杆相加PK")
+            if combination_mode == "双方总杆相乘PK":
+                team["total_score"] = team["net_scores"][0] * team["net_scores"][1]
+            else:  # 默认相加
+                team["total_score"] = sum(team["net_scores"])
 
         return net_scores
 
@@ -367,8 +443,12 @@ class LaSiThreePointAPI:
         # 最差成绩PK
         worst_pk = self._compare_scores(team1["worst_score"], team2["worst_score"], base_score)
 
-        # 总分PK
+        # 总分PK (现在支持相加和相乘两种模式)
         total_pk = self._compare_scores(team1["total_score"], team2["total_score"], base_score)
+
+        # 添加组合PK模式信息
+        combination_mode = game_config.combination_pk_config.get("mode", "双方总杆相加PK")
+        total_pk["combination_mode"] = combination_mode
 
         return {
             "best_pk": best_pk,
