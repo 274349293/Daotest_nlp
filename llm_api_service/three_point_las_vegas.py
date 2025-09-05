@@ -5,11 +5,18 @@ from pydantic import BaseModel, Field
 from utils.nlp_logging import CustomLogger
 
 """
-更新版拉丝三点高尔夫赌球游戏计分接口
-新增功能：
-- 组合PK模式选择（相加/相乘）
-- 乱拉模式高手不见面设置
-- 完善的队伍配对逻辑
+拉丝三点高尔夫赌球游戏计分接口
+实现完整的拉丝三点游戏计分逻辑，包括：
+- 固拉/乱拉两种模式
+- 高手不见面配置（新增）
+- 组合PK相加/相乘模式（新增）
+- 三项比较计分（最好/最差/总分）
+- 鸟鹰基础分数和额外奖励系统
+- 双杀奖励机制
+- 平洞累积和收取规则
+- 包赔规则判定和分数重分配
+- 复杂让杆规则和条件限制
+- 捐锅和让分最终结算
 
 """
 
@@ -87,6 +94,9 @@ class GameConfig(BaseModel):
         "points": 0
     })
 
+    # 移入GameConfig：让杆设置
+    handicap_settings: Dict[str, Dict[str, float]] = Field(default_factory=dict, description="让杆设置")
+
 
 class Player(BaseModel):
     id: str
@@ -115,7 +125,6 @@ class LaSiGameData(BaseModel):
     game_config: GameConfig
     players: List[Player]
     fixed_teams: Optional[List[FixedTeam]] = None
-    handicap_settings: Dict[str, Dict[str, float]] = Field(default_factory=dict)
     holes: List[Hole]
 
 
@@ -160,7 +169,7 @@ class LaSiThreePointAPI:
             return result
 
         except Exception as e:
-            self.logger.error(f"计分过程发生错误: {str(e)}", exc_info=True)
+            self.logger.error(f"计分过程发生错误: {str(e)}")
             return self._error_response(f"计分失败: {str(e)}")
 
     def _validate_game_data(self, game_data: LaSiGameData) -> bool:
@@ -372,8 +381,8 @@ class LaSiThreePointAPI:
             for i, player_id in enumerate(team["team_players"]):
                 raw_score = team["raw_scores"][i]
 
-                # 获取让杆数
-                handicap = self._get_player_handicap(player_id, hole.hole_type, game_data.handicap_settings)
+                # 获取让杆数 - 修改为使用game_config.handicap_settings
+                handicap = self._get_player_handicap(player_id, hole.hole_type, game_data.game_config.handicap_settings)
 
                 # 检查让杆限制条件
                 effective_handicap = self._apply_handicap_restrictions(
@@ -671,7 +680,7 @@ class LaSiThreePointAPI:
         }
 
     def _handle_tie_logic(self, pk_results: Dict[str, Any], score_state: Dict[str, Any], game_config: GameConfig) -> \
-            Dict[str, Any]:
+    Dict[str, Any]:
         """处理平洞逻辑"""
         tie_config = game_config.tie_config
 
@@ -1113,7 +1122,7 @@ def calculate_lasi_score(game_data: LaSiGameData) -> Dict[str, Any]:
         return result
 
     except Exception as e:
-        logger.error(f"拉丝三点计分接口异常: {str(e)}", exc_info=True)
+        logger.error(f"拉丝三点计分接口异常: {str(e)}")
         return {
             "success": False,
             "error_code": "INTERFACE_ERROR",
