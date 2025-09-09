@@ -13,6 +13,7 @@ from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDi
 from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
 from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
+from llm_api_service.three_point_las_vegas_simple import calculate_simple_lasi_score, SimpleLaSiGameData
 
 app = FastAPI()
 
@@ -31,6 +32,7 @@ app = FastAPI()
 11. llm_chat 优化后的多轮对话接口，支持不同场景
 12. golf_llm 高尔夫相关问题的智能回复接口
 13. three_point_las_vegas 高尔夫赌球游戏 拉丝3点
+14. lasi_scoring_simple 高尔夫赌球游戏 拉丝3点（简化版）
 """
 
 
@@ -119,6 +121,13 @@ async def golf_llm_fun(golf_info: GolfLLMInfo):
 @app.post("/lasi_scoring")
 def lasi_scoring_fun(game_data: LaSiGameData):
     result = calculate_lasi_score(game_data)
+    return result
+
+
+# 新增：简化版拉丝三点接口
+@app.post("/lasi_scoring_simple")
+def lasi_scoring_simple_fun(game_data: SimpleLaSiGameData):
+    result = calculate_simple_lasi_score(game_data)
     return result
 
 
