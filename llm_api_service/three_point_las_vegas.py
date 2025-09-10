@@ -18,6 +18,7 @@ from utils.nlp_logging import CustomLogger
 - 复杂让杆规则和条件限制
 - 捐锅和让分最终结算
 
+修改：将 fixed_teams 移至 game_config 内
 """
 
 logger = CustomLogger(name="DaoTest 3-Point Las Vegas api", write_to_file=True)
@@ -41,9 +42,17 @@ class DialogueMessage(BaseModel):
     content: str
 
 
+class FixedTeam(BaseModel):
+    team_id: int
+    players: List[str]
+
+
 class GameConfig(BaseModel):
     mode: str = Field(..., description="游戏模式: 固拉 | 乱拉")
     base_score: int = Field(default=1, description="基础分")
+
+    # 修改：将 fixed_teams 移至 game_config 内
+    fixed_teams: Optional[List[FixedTeam]] = Field(default=None, description="固定队伍配置，仅固拉模式使用")
 
     # 新增：组合PK配置
     combination_pk_config: Dict[str, str] = Field(default_factory=lambda: {
@@ -94,18 +103,13 @@ class GameConfig(BaseModel):
         "points": 0
     })
 
-    # 移入GameConfig：让杆设置
+    # 让杆设置
     handicap_settings: Dict[str, Dict[str, float]] = Field(default_factory=dict, description="让杆设置")
 
 
 class Player(BaseModel):
     id: str
     name: str
-
-
-class FixedTeam(BaseModel):
-    team_id: int
-    players: List[str]
 
 
 class Score(BaseModel):
@@ -124,7 +128,6 @@ class Hole(BaseModel):
 class LaSiGameData(BaseModel):
     game_config: GameConfig
     players: List[Player]
-    fixed_teams: Optional[List[FixedTeam]] = None
     holes: List[Hole]
 
 
@@ -182,7 +185,8 @@ class LaSiThreePointAPI:
 
             # 验证固拉模式的队伍配置
             if game_data.game_config.mode == "固拉":
-                if not game_data.fixed_teams or len(game_data.fixed_teams) != 2:
+                # 修改：从 game_config 内获取 fixed_teams
+                if not game_data.game_config.fixed_teams or len(game_data.game_config.fixed_teams) != 2:
                     self.logger.error("固拉模式缺少队伍配置")
                     return False
 
@@ -281,9 +285,9 @@ class LaSiThreePointAPI:
     def _determine_teams(self, hole: Hole, game_data: LaSiGameData) -> List[Dict[str, Any]]:
         """确定队伍配对"""
         if game_data.game_config.mode == "固拉":
-            # 固拉模式：使用固定队伍
+            # 固拉模式：使用固定队伍 - 修改：从 game_config 内获取
             teams = []
-            for fixed_team in game_data.fixed_teams:
+            for fixed_team in game_data.game_config.fixed_teams:
                 team_data = {
                     "team_id": fixed_team.team_id,
                     "team_players": fixed_team.players,
@@ -372,8 +376,7 @@ class LaSiThreePointAPI:
             }
         ]
 
-    def _calculate_net_scores(self, hole: Hole, game_data: LaSiGameData, teams: List[Dict[str, Any]]) -> Dict[
-        str, float]:
+    def _calculate_net_scores(self, hole: Hole, game_data: LaSiGameData, teams: List[Dict[str, Any]]) -> Dict[str, float]:
         """计算净杆数（应用让杆）"""
         net_scores = {}
 
@@ -381,7 +384,7 @@ class LaSiThreePointAPI:
             for i, player_id in enumerate(team["team_players"]):
                 raw_score = team["raw_scores"][i]
 
-                # 获取让杆数 - 修改为使用game_config.handicap_settings
+                # 获取让杆数
                 handicap = self._get_player_handicap(player_id, hole.hole_type, game_data.game_config.handicap_settings)
 
                 # 检查让杆限制条件
@@ -679,8 +682,7 @@ class LaSiThreePointAPI:
             "details": compensation_details
         }
 
-    def _handle_tie_logic(self, pk_results: Dict[str, Any], score_state: Dict[str, Any], game_config: GameConfig) -> \
-    Dict[str, Any]:
+    def _handle_tie_logic(self, pk_results: Dict[str, Any], score_state: Dict[str, Any], game_config: GameConfig) -> Dict[str, Any]:
         """处理平洞逻辑"""
         tie_config = game_config.tie_config
 
@@ -940,8 +942,7 @@ class LaSiThreePointAPI:
                             score["tie_score"] = multiplier
                             break
 
-    def _determine_next_tee_order(self, hole: Hole, teams: List[Dict[str, Any]], net_scores: Dict[str, float]) -> List[
-        str]:
+    def _determine_next_tee_order(self, hole: Hole, teams: List[Dict[str, Any]], net_scores: Dict[str, float]) -> List[str]:
         """确定下洞开球顺序"""
         # 按净杆数排序，最好成绩先开球
         player_scores = []
@@ -1040,8 +1041,7 @@ class LaSiThreePointAPI:
             "donation_details": donation_details
         }
 
-    def _calculate_score_adjustment(self, final_scores: List[Dict[str, Any]], game_config: GameConfig) -> Dict[
-        str, Any]:
+    def _calculate_score_adjustment(self, final_scores: List[Dict[str, Any]], game_config: GameConfig) -> Dict[str, Any]:
         """计算让分调整"""
         adjustment_config = game_config.score_adjustment_config
         mode = adjustment_config.get("mode", "单让")

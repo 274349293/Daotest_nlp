@@ -14,6 +14,7 @@ from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
 from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
 from llm_api_service.three_point_las_vegas_simple import calculate_simple_lasi_score, SimpleLaSiGameData
+from llm_api_service.stroke_and_match_combo import calculate_stroke_match_score, StrokeMatchGameData
 
 app = FastAPI()
 
@@ -31,8 +32,8 @@ app = FastAPI()
 10. realtime_function_call_advanced 实时语音模型function call 结果返回(用户query检索）
 11. llm_chat 优化后的多轮对话接口，支持不同场景
 12. golf_llm 高尔夫相关问题的智能回复接口
-13. three_point_las_vegas 高尔夫赌球游戏 拉丝3点
-14. lasi_scoring_simple 高尔夫赌球游戏 拉丝3点（简化版）
+13. three_point_las_vegas 高尔夫游戏 拉丝3点
+14. stroke_match_combo 高尔夫游戏 比杆比洞
 """
 
 
@@ -124,10 +125,9 @@ def lasi_scoring_fun(game_data: LaSiGameData):
     return result
 
 
-# 新增：简化版拉丝三点接口
-@app.post("/lasi_scoring_simple")
-def lasi_scoring_simple_fun(game_data: SimpleLaSiGameData):
-    result = calculate_simple_lasi_score(game_data)
+@app.post("/stroke_match_combo")
+def stroke_match_combo_fun(game_data: StrokeMatchGameData):
+    result = calculate_stroke_match_score(game_data)
     return result
 
 
