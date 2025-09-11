@@ -293,6 +293,21 @@ class LaSiThreePointScoring:
         self.logger.info("=" * 80)
 
         try:
+            # 打印完整入参
+            self.logger.info("\n完整入参:")
+            self.logger.info("-" * 60)
+
+            # 将完整的game_data转换为字典并打印
+            complete_data = {
+                "game_config": game_data.game_config.dict(),
+                "players": [player.dict() for player in game_data.players],
+                "holes": [hole.dict() for hole in game_data.holes]
+            }
+
+            self.logger.info("完整游戏数据JSON:")
+            self.logger.info(json.dumps(complete_data, ensure_ascii=False, indent=2))
+
+            self.logger.info("-" * 60)
             # 0. 参数校验 - 新增
             is_valid, validation_errors = self._validate_config_parameters(game_data.game_config)
             if not is_valid:
@@ -1019,13 +1034,13 @@ class LaSiThreePointScoring:
             collected_score = 0
             collect_count = 0
 
-            # 修改这里：对于翻倍模式检查tie_count，对于非翻倍模式检查tie_accumulated_score
             scoring_rule = tie_config.scoring
             should_collect = False
 
             self.logger.info(f"非平洞，检查是否收取: 计分规则={scoring_rule}")
 
-            if scoring_rule in ["平洞翻倍(不算鸟鹰奖励)", "平洞翻倍(算鸟鹰奖励)"]:
+            # 修复这里：更新字符串匹配条件
+            if scoring_rule in ["平洞翻倍(不算鸟鹰奖)", "平洞翻倍(算鸟鹰奖)"]:
                 should_collect = scoring_state["tie_count"] > 0  # 翻倍模式检查次数
                 self.logger.info(f"翻倍模式检查: 平洞次数={scoring_state['tie_count']}, 是否收取={should_collect}")
             else:
@@ -1100,7 +1115,7 @@ class LaSiThreePointScoring:
 
         # 处理不同的收取规则
         if collect_rule == "赢了全收掉":
-            if scoring_rule in ["平洞翻倍(不算鸟鹰奖励)", "平洞翻倍(算鸟鹰奖励)"]:
+            if scoring_rule in ["平洞翻倍(不算鸟鹰奖)", "平洞翻倍(算鸟鹰奖)"]:  # 修复：去掉"励"字
                 # 翻倍模式：收取分数 = 本洞PK净胜分 × 平洞次数
                 if scoring_state["tie_count"] > 0:
                     # 计算本洞PK净胜分
@@ -1135,7 +1150,7 @@ class LaSiThreePointScoring:
 
         elif collect_rule == "Par收1/鸟收2/鹰收5":
             # 根据获胜队伍的最好成就确定收取倍数
-            if scoring_rule in ["平洞翻倍(不算鸟鹰奖励)", "平洞翻倍(算鸟鹰奖励)"]:
+            if scoring_rule in ["平洞翻倍(不算鸟鹰奖)", "平洞翻倍(算鸟鹰奖)"]:  # 修复：去掉"励"字
                 if scoring_state["tie_count"] > 0:
                     # 计算本洞PK净胜分
                     total_diff = 0
@@ -1188,6 +1203,32 @@ class LaSiThreePointScoring:
 
         self.logger.info("未满足收取条件，返回0")
         return 0, 0
+
+    # 删除重复的函数定义，只保留一个
+    def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
+        """获取队伍中的最好成就"""
+        best_score_to_par = float('inf')
+
+        for i, player_id in enumerate(team["team_players"]):
+            raw_score = team["raw_scores"][i]
+            score_to_par = raw_score - par
+            if score_to_par < best_score_to_par:
+                best_score_to_par = score_to_par
+
+        return self._get_achievement_name(best_score_to_par)
+
+    # 删除重复的函数定义，只保留一个
+    def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
+        """获取队伍中的最好成就"""
+        best_score_to_par = float('inf')
+
+        for i, player_id in enumerate(team["team_players"]):
+            raw_score = team["raw_scores"][i]
+            score_to_par = raw_score - par
+            if score_to_par < best_score_to_par:
+                best_score_to_par = score_to_par
+
+        return self._get_achievement_name(best_score_to_par)
 
     def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
         """获取队伍中的最好成就"""
