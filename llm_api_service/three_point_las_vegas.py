@@ -169,6 +169,123 @@ class LaSiThreePointScoring:
     def __init__(self):
         self.logger = logger
 
+    def _validate_config_parameters(self, game_config: GameConfig) -> Tuple[bool, List[str]]:
+        """校验游戏配置参数，返回(是否通过, 错误信息列表)"""
+        errors = []
+
+        # 定义所有合法参数值
+        VALID_MODES = ["固拉", "乱拉"]
+
+        VALID_COMBINATION_PK_MODES = ["双方总杆相加PK", "双方总杆相乘PK"]
+
+        VALID_DOUBLE_KILL_TYPES = ["不奖励", "奖励1分", "奖励2分", "奖励3分", "翻倍奖励"]
+
+        VALID_BIRD_EAGLE_CONDITIONS = ["合并pk赢了才奖励"]
+
+        VALID_BIRD_EAGLE_EXTRA_REWARDS = [
+            "不奖励",
+            "鸟+1/鹰+4/HIO+9", "鸟+1/鹰+4/HIO+8", "鸟+1/鹰+5/HIO+10", "鸟+1/鹰+10/HIO+20",
+            "鸟*2/鹰*4/HIO*8", "鸟*2/鹰*5/HIO*10"
+        ]
+
+        VALID_TIE_DEFINITIONS = ["得分差为0"]
+
+        VALID_TIE_SCORING = [
+            "平洞跳过(无肉)", "平洞算1点", "平洞算2点", "平洞算3点", "平洞算4点",
+            "平洞翻倍(不算鸟鹰奖)", "平洞翻倍(算鸟鹰奖)", "平洞连续翻番"
+        ]
+
+        VALID_TIE_COLLECT_RULES = [
+            "赢了全收掉",
+            "Par收1/鸟收2/鹰收4", "Par收1/鸟收2/鹰收5", "Par收1/鸟收2/鹰全收",
+            "赢了收1洞", "赢了收2洞", "赢了收3洞", "赢了收4洞", "赢了收5洞"
+        ]
+
+        VALID_COMPENSATION_SCOPES = ["不包赔", "包本洞所有分", "包含平洞的所有分"]
+
+        VALID_DONATION_TYPES = ["不捐", "赢了捐1点", "每赢2点捐1点", "每赢3点捐1点", "赢了全捐"]
+
+        VALID_ADJUSTMENT_MODES = ["单让", "互虚"]
+
+        VALID_ADJUSTMENT_TYPES = ["实让", "虚让"]
+
+        VALID_HOLE_TYPES = ["三杆洞", "四杆洞", "五杆洞"]
+
+        # 开始校验
+        self.logger.info("开始参数校验...")
+
+        # 1. 游戏模式
+        if game_config.mode not in VALID_MODES:
+            errors.append(f"无效的游戏模式: '{game_config.mode}', 有效值: {VALID_MODES}")
+
+        # 2. 组合PK配置
+        combination_mode = game_config.combination_pk_config.mode
+        if combination_mode not in VALID_COMBINATION_PK_MODES:
+            errors.append(f"无效的组合PK模式: '{combination_mode}', 有效值: {VALID_COMBINATION_PK_MODES}")
+
+        # 3. 双杀配置
+        double_kill_type = game_config.double_kill_config.type
+        if double_kill_type not in VALID_DOUBLE_KILL_TYPES:
+            errors.append(f"无效的双杀类型: '{double_kill_type}', 有效值: {VALID_DOUBLE_KILL_TYPES}")
+
+        # 4. 鸟鹰配置
+        bird_eagle_condition = game_config.bird_eagle_config.condition
+        if bird_eagle_condition not in VALID_BIRD_EAGLE_CONDITIONS:
+            errors.append(f"无效的鸟鹰条件: '{bird_eagle_condition}', 有效值: {VALID_BIRD_EAGLE_CONDITIONS}")
+
+        bird_eagle_extra = game_config.bird_eagle_config.extra_reward
+        if bird_eagle_extra not in VALID_BIRD_EAGLE_EXTRA_REWARDS:
+            errors.append(f"无效的鸟鹰额外奖励: '{bird_eagle_extra}', 有效值: {VALID_BIRD_EAGLE_EXTRA_REWARDS}")
+
+        # 5. 平洞配置
+        tie_definition = game_config.tie_config.definition
+        if tie_definition not in VALID_TIE_DEFINITIONS:
+            errors.append(f"无效的平洞定义: '{tie_definition}', 有效值: {VALID_TIE_DEFINITIONS}")
+
+        tie_scoring = game_config.tie_config.scoring
+        if tie_scoring not in VALID_TIE_SCORING:
+            errors.append(f"无效的平洞计分规则: '{tie_scoring}', 有效值: {VALID_TIE_SCORING}")
+
+        tie_collect = game_config.tie_config.collect_rule
+        if tie_collect not in VALID_TIE_COLLECT_RULES:
+            errors.append(f"无效的平洞收取规则: '{tie_collect}', 有效值: {VALID_TIE_COLLECT_RULES}")
+
+        # 6. 包赔配置
+        compensation_scope = game_config.compensation_config.scope
+        if compensation_scope not in VALID_COMPENSATION_SCOPES:
+            errors.append(f"无效的包赔范围: '{compensation_scope}', 有效值: {VALID_COMPENSATION_SCOPES}")
+
+        # 7. 捐锅配置
+        donation_type = game_config.donation_config.type
+        if donation_type not in VALID_DONATION_TYPES:
+            errors.append(f"无效的捐锅类型: '{donation_type}', 有效值: {VALID_DONATION_TYPES}")
+
+        # 8. 让分配置（仅固拉模式）
+        if game_config.mode == "固拉":
+            adjustment_mode = game_config.score_adjustment_config.mode
+            if adjustment_mode not in VALID_ADJUSTMENT_MODES:
+                errors.append(f"无效的让分模式: '{adjustment_mode}', 有效值: {VALID_ADJUSTMENT_MODES}")
+
+            adjustment_type = game_config.score_adjustment_config.adjustment_type
+            if adjustment_type not in VALID_ADJUSTMENT_TYPES:
+                errors.append(f"无效的让分类型: '{adjustment_type}', 有效值: {VALID_ADJUSTMENT_TYPES}")
+
+        # 9. 让杆配置中的洞次类型
+        for player_id, handicap_settings in game_config.handicap_settings.items():
+            for hole_type, handicap in handicap_settings.items():
+                if hole_type not in VALID_HOLE_TYPES:
+                    errors.append(f"选手 '{player_id}' 无效的洞次类型: '{hole_type}', 有效值: {VALID_HOLE_TYPES}")
+
+        # 输出校验结果
+        if errors:
+            self.logger.error("参数校验失败:")
+            for error in errors:
+                self.logger.error(f"  - {error}")
+            return False, errors
+        else:
+            self.logger.info("参数校验通过")
+            return True, []
+
     def calculate_score(self, game_data: LaSiGameData) -> Dict[str, Any]:
         """主计分函数"""
         self.logger.info("=" * 80)
@@ -176,6 +293,10 @@ class LaSiThreePointScoring:
         self.logger.info("=" * 80)
 
         try:
+            # 0. 参数校验 - 新增
+            is_valid, validation_errors = self._validate_config_parameters(game_data.game_config)
+            if not is_valid:
+                return self._create_error_response(f"参数校验失败: {'; '.join(validation_errors)}")
             # 1. 数据验证
             if not self._validate_game_data(game_data):
                 return self._create_error_response("数据验证失败")
