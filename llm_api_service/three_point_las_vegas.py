@@ -1047,21 +1047,23 @@ class LaSiThreePointScoring:
                         else:
                             collect_multiplier = 1  # Par或更差
 
-                        self.logger.info(f"获胜队伍最好成就: {best_achievement}, 收取倍数: {collect_multiplier}")
+                        self.logger.info(f"获胜队伍最好成就: {best_achievement}, 期望收取倍数: {collect_multiplier}")
 
+                    # 关键修复：收取次数不能超过实际积累的平洞次数
                     base_score = abs(total_diff)  # 使用绝对值作为基础分数
-                    collected = base_score * collect_multiplier
-                    collect_count = scoring_state["tie_count"]
+                    actual_collect_count = min(collect_multiplier, scoring_state["tie_count"])
+                    collected = base_score * actual_collect_count
 
                     self.logger.info(
-                        f"成就收取模式: 本洞净胜分={total_diff}, 基础分数={base_score}, 平洞次数={scoring_state['tie_count']}")
-                    self.logger.info(f"最终收取分数={collected}")
+                        f"实际收取次数: {actual_collect_count} (期望{collect_multiplier}次，积累{scoring_state['tie_count']}次)")
+                    self.logger.info(
+                        f"计算: 本洞净胜分{base_score} × 实际收取次数{actual_collect_count} = {collected}分")
 
-                    # 清空累积
+                    # 清空累积 - 按实际收取次数减少
                     scoring_state["tie_accumulated_score"] = 0
-                    scoring_state["tie_count"] = 0
+                    scoring_state["tie_count"] -= actual_collect_count
 
-                    return collected, collect_count
+                    return collected, actual_collect_count
 
         self.logger.info("未满足收取条件，返回0")
         return 0, 0
