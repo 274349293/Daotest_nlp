@@ -454,7 +454,7 @@ class LaSiThreePointScoring:
                                                   compensation, tie_status, game_data.game_config, game_data.players)
 
         # 8. 确定下洞开球顺序
-        next_tee_order = self._determine_next_tee_order(hole, teams, game_data.players)
+        next_tee_order = self._determine_next_tee_order(hole, teams, game_data.players, game_data.game_config)
         scoring_state["current_tee_order"] = next_tee_order
 
         return {
@@ -1559,35 +1559,69 @@ class LaSiThreePointScoring:
                     self.logger.info(
                         f"  {compensating_player} 的 {-compensating_negative}分负分由 {compensated_by} 承担")
 
-    def _determine_next_tee_order(self, hole: Hole, teams: List[Dict[str, Any]], players: List[Player]) -> List[str]:
+    def _determine_next_tee_order(self, hole: Hole, teams: List[Dict[str, Any]], players: List[Player],
+                                  game_config: GameConfig) -> List[str]:
         """确定下洞开球顺序"""
         self.logger.info(f"\n--- 确定下洞开球顺序 ---")
 
-        # 收集所有选手的净杆数和当前洞开球顺序位置
+        # 检查是否启用"仅组合PK让杆"限制
+        restrictions = game_config.handicap_config.restrictions
+        only_combination_pk = restrictions.only_combination_pk
+
+        if only_combination_pk:
+            self.logger.info("【仅组合PK让杆】限制生效: 击球顺序使用原始杆数排序")
+            score_type = "原始杆数"
+        else:
+            self.logger.info("【仅组合PK让杆】限制未生效: 击球顺序使用净杆数排序")
+            score_type = "净杆数"
+
+        # 收集所有选手的杆数和当前洞开球顺序位置
         player_scores = []
         current_tee_order = hole.tee_order
 
         for team in teams:
             for i, player_id in enumerate(team["team_players"]):
-                net_score = team["net_scores"][i]
+                # 根据"仅组合PK让杆"限制选择使用的杆数
+                if only_combination_pk:
+                    # 使用原始杆数
+                    score_for_order = team["raw_scores"][i]
+                else:
+                    # 使用净杆数
+                    score_for_order = team["net_scores"][i]
+
                 # 获取该选手在当前洞开球顺序中的位置
                 current_position = current_tee_order.index(player_id)
-                player_scores.append((player_id, net_score, current_position))
+                player_scores.append((player_id, score_for_order, current_position))
 
-        # 打印当前洞的净杆数详情
-        self.logger.info("本洞净杆数详情:")
-        for player_id, net_score, position in player_scores:
+        # 打印当前洞的杆数详情
+        self.logger.info(f"本洞{score_type}详情:")
+        for player_id, score, position in player_scores:
             player_name = next((p.name for p in players if p.id == player_id), player_id)
-            self.logger.info(f"  {player_name}: {net_score}杆 (本洞开球第{position + 1}位)")
+            if only_combination_pk:
+                self.logger.info(f"  {player_name}: {score}杆 (本洞开球第{position + 1}位)")
+            else:
+                # 显示净杆数的计算过程
+                for team in teams:
+                    if player_id in team["team_players"]:
+                        idx = team["team_players"].index(player_id)
+                        raw_score = team["raw_scores"][idx]
+                        handicap = team["handicaps"][idx]
+                        if handicap > 0:
+                            self.logger.info(
+                                f"  {player_name}: {raw_score}杆 - {handicap}让杆 = {score}净杆 (本洞开球第{position + 1}位)")
+                        else:
+                            self.logger.info(
+                                f"  {player_name}: {raw_score}杆 (无让杆) = {score}净杆 (本洞开球第{position + 1}位)")
+                        break
 
-        # 按净杆数升序排序，净杆数相同时按当前洞开球顺序排序
+        # 按杆数升序排序，杆数相同时按当前洞开球顺序排序
         player_scores.sort(key=lambda x: (x[1], x[2]))
 
         # 打印排序逻辑详情
         self.logger.info("下洞开球顺序排序逻辑:")
-        for i, (player_id, net_score, position) in enumerate(player_scores):
+        for i, (player_id, score, position) in enumerate(player_scores):
             player_name = next((p.name for p in players if p.id == player_id), player_id)
-            self.logger.info(f"  第{i + 1}位: {player_name} ({net_score}杆)")
+            self.logger.info(f"  第{i + 1}位: {player_name} ({score}杆)")
 
         next_order = [player_id for player_id, _, _ in player_scores]
 

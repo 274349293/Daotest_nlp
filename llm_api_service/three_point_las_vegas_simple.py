@@ -202,53 +202,86 @@ class TeeOrderCalculator:
         # 构建分数映射
         score_map = {score.player_id: score.raw_strokes for score in previous_hole.scores}
 
-        # 计算每个选手的净杆数
-        player_net_scores = []
-        for player in players:
-            raw_score = score_map[player.id]
+        # 检查是否启用了"仅组合PK让杆"
+        only_combination_pk = game_config.handicap_config.restrictions.only_combination_pk
 
-            # 获取让杆数
-            handicap = self._get_player_handicap(
-                player.id, previous_hole.hole_type, game_config.handicap_settings
-            )
+        if only_combination_pk:
+            self.logger.info("启用了'仅组合PK让杆'，击球顺序使用原始杆数排序")
+            # 使用原始杆数计算击球顺序
+            player_scores = []
+            for player in players:
+                raw_score = score_map[player.id]
+                previous_position = previous_hole.tee_order.index(player.id)
 
-            # 应用让杆限制条件
-            effective_handicap = self._apply_handicap_restrictions(
-                player.id, handicap, raw_score, previous_hole.par,
-                score_map, game_config.handicap_config.restrictions
-            )
+                player_scores.append({
+                    'player_id': player.id,
+                    'player_name': player.name,
+                    'raw_score': raw_score,
+                    'sort_score': raw_score,  # 使用原始杆数作为排序依据
+                    'previous_position': previous_position
+                })
 
-            # 计算净杆数
-            net_score = raw_score - effective_handicap
+                self.logger.info(f"  {player.name}: {raw_score}杆 (原始杆数)")
 
-            # 获取上一洞的击球顺序位置（用于同分处理）
-            previous_position = previous_hole.tee_order.index(player.id)
+            # 排序：按原始杆数升序，同分时按上一洞击球顺序排序
+            player_scores.sort(key=lambda x: (x['sort_score'], x['previous_position']))
 
-            player_net_scores.append({
-                'player_id': player.id,
-                'player_name': player.name,
-                'raw_score': raw_score,
-                'handicap': effective_handicap,
-                'net_score': net_score,
-                'previous_position': previous_position
-            })
+            # 打印排序详情
+            self.logger.info("排序详情（原始杆数，上洞位置）:")
+            for i, player_info in enumerate(player_scores):
+                self.logger.info(f"  第{i + 1}位: {player_info['player_name']} "
+                                 f"(原始{player_info['sort_score']}杆, 上洞第{player_info['previous_position'] + 1}位)")
 
-            if effective_handicap > 0:
-                self.logger.info(f"  {player.name}: {raw_score}杆 - {effective_handicap}让杆 = {net_score}净杆")
-            else:
-                self.logger.info(f"  {player.name}: {raw_score}杆 (无让杆)")
+        else:
+            self.logger.info("未启用'仅组合PK让杆'，击球顺序使用净杆数排序")
+            # 计算每个选手的净杆数
+            player_scores = []
+            for player in players:
+                raw_score = score_map[player.id]
 
-        # 排序：按净杆数升序，同分时按上一洞击球顺序排序
-        player_net_scores.sort(key=lambda x: (x['net_score'], x['previous_position']))
+                # 获取让杆数
+                handicap = self._get_player_handicap(
+                    player.id, previous_hole.hole_type, game_config.handicap_settings
+                )
+
+                # 应用让杆限制条件
+                effective_handicap = self._apply_handicap_restrictions(
+                    player.id, handicap, raw_score, previous_hole.par,
+                    score_map, game_config.handicap_config.restrictions
+                )
+
+                # 计算净杆数
+                net_score = raw_score - effective_handicap
+
+                # 获取上一洞的击球顺序位置（用于同分处理）
+                previous_position = previous_hole.tee_order.index(player.id)
+
+                player_scores.append({
+                    'player_id': player.id,
+                    'player_name': player.name,
+                    'raw_score': raw_score,
+                    'handicap': effective_handicap,
+                    'net_score': net_score,
+                    'sort_score': net_score,  # 使用净杆数作为排序依据
+                    'previous_position': previous_position
+                })
+
+                if effective_handicap > 0:
+                    self.logger.info(f"  {player.name}: {raw_score}杆 - {effective_handicap}让杆 = {net_score}净杆")
+                else:
+                    self.logger.info(f"  {player.name}: {raw_score}杆 (无让杆)")
+
+            # 排序：按净杆数升序，同分时按上一洞击球顺序排序
+            player_scores.sort(key=lambda x: (x['sort_score'], x['previous_position']))
+
+            # 打印排序详情
+            self.logger.info("排序详情（净杆数，上洞位置）:")
+            for i, player_info in enumerate(player_scores):
+                self.logger.info(f"  第{i + 1}位: {player_info['player_name']} "
+                                 f"(净杆{player_info['sort_score']}, 上洞第{player_info['previous_position'] + 1}位)")
 
         # 生成下一洞击球顺序
-        next_tee_order = [player_info['player_id'] for player_info in player_net_scores]
-
-        # 打印排序详情
-        self.logger.info("排序详情（净杆数，上洞位置）:")
-        for i, player_info in enumerate(player_net_scores):
-            self.logger.info(f"  第{i + 1}位: {player_info['player_name']} "
-                             f"(净杆{player_info['net_score']}, 上洞第{player_info['previous_position'] + 1}位)")
+        next_tee_order = [player_info['player_id'] for player_info in player_scores]
 
         return next_tee_order
 
