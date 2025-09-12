@@ -533,23 +533,26 @@ class UpdatedStrokeMatchAPI:
 
     def _collect_tie_score(self, base_p1: float, base_p2: float, p1_raw: int, p2_raw: int, par: int,
                            state: Dict[str, Any], config: GameConfig, p1_name: str, p2_name: str) -> float:
-        """收取平洞分数（固定规则：par收1/鸟收2/鹰收5）"""
+        """收取平洞分数（修复版：只有Par或更好成绩获胜才能收取）"""
         winner_raw = p1_raw if base_p1 > base_p2 else p2_raw
         winner_name = p1_name if base_p1 > base_p2 else p2_name
         score_to_par = winner_raw - par
 
         # 根据获胜者成绩确定收取次数
-        collect_count = 1  # par收1
-        achievement = "标准杆"
-        if score_to_par == -1:  # 小鸟收2
-            collect_count = 2
-            achievement = "小鸟"
-        elif score_to_par <= -2:  # 老鹰及以上收5
+        collect_count = 0  # 默认不收取
+        achievement = ""
+
+        if score_to_par <= -2:  # 老鹰及以上收5
             collect_count = 5
             achievement = self._get_achievement_name(score_to_par, winner_raw, par)
-        elif score_to_par == 0:
+        elif score_to_par == -1:  # 小鸟收2
+            collect_count = 2
+            achievement = "小鸟"
+        elif score_to_par == 0:  # 标准杆收1
+            collect_count = 1
             achievement = "标准杆"
-        else:
+        else:  # 柏忌及以上（score_to_par > 0）不能收取
+            collect_count = 0
             achievement = f"+{score_to_par}杆"
 
         # 实际收取次数不能超过累积次数
@@ -557,7 +560,16 @@ class UpdatedStrokeMatchAPI:
 
         self.logger.info(f"   平洞收取计算:")
         self.logger.info(f"     获胜者{winner_name}打出{achievement}，期望收取{collect_count}次平洞")
+
+        if collect_count == 0:
+            self.logger.info(f"     获胜者成绩不符合收取条件（需要Par或更好成绩）")
+            return 0.0
+
         self.logger.info(f"     实际可收取: {actual_collect}次 (当前累积{state['tie_count']}次)")
+
+        if actual_collect == 0:
+            self.logger.info(f"     无累积平洞分数可收取")
+            return 0.0
 
         if config.tie_scoring_rule == "平洞翻倍(不算鸟鹰奖)":
             # 翻倍模式：收取分数 = 本洞胜负差 × 收取次数
