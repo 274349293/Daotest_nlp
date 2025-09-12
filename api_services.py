@@ -15,8 +15,8 @@ from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
 from llm_api_service.three_point_las_vegas_simple import calculate_tee_order, LaSiGameData
 from llm_api_service.stroke_and_match_combo import calculate_stroke_match_score, StrokeMatchGameData
-from llm_api_service.golf_combined_scoring import golf_combined_scoring, GolfCombinedGameData
-
+from llm_api_service.golf_combined_scoring import golf_combined_scoring
+from typing import Dict, Any
 app = FastAPI()
 
 """
@@ -162,7 +162,7 @@ def tee_order_calculation_fun(game_data: LaSiGameData):
 
 
 @app.post("/golf_combined_score")
-def golf_combined_score_fun(combined_data: GolfCombinedGameData):
+def golf_combined_score_fun(combined_data: Dict[str, Any]):
     """
     高尔夫综合计分接口
 
