@@ -16,7 +16,7 @@ from datetime import datetime
 - 双杀奖励机制
 - 平洞累积和收取规则
 - 包赔规则判定和分数重分配
-- 复杂让杆规则和条件限制
+- 复杂让杆规则和条件限制（已修复）
 - 捐锅和让分最终结算
 """
 
@@ -433,10 +433,10 @@ class LaSiThreePointScoring:
         # 1. 确定队伍配对
         teams = self._determine_teams(hole, game_data)
 
-        # 2. 计算净杆数（应用让杆）
-        self._calculate_net_scores(hole, game_data, teams)
+        # 2. 计算净杆数（应用让杆）- 修复：支持让杆限制条件
+        self._calculate_scores_with_handicap_restrictions(hole, game_data, teams)
 
-        # 3. 执行三项比较PK
+        # 3. 执行三项比较PK - 修复：支持"仅组合PK让杆"限制
         pk_results = self._execute_pk_comparisons(teams, game_data.game_config)
 
         # 4. 计算特殊奖励
@@ -488,7 +488,8 @@ class LaSiThreePointScoring:
                     "team_players": team_players,
                     "raw_scores": [],
                     "handicaps": [],
-                    "net_scores": []
+                    "net_scores": [],
+                    "handicap_restrictions_applied": []  # 新增：记录让杆限制应用情况
                 })
         else:
             # 乱拉模式
@@ -549,14 +550,16 @@ class LaSiThreePointScoring:
                     "team_players": team1_players,
                     "raw_scores": [],
                     "handicaps": [],
-                    "net_scores": []
+                    "net_scores": [],
+                    "handicap_restrictions_applied": []  # 新增
                 },
                 {
                     "team_id": 2,
                     "team_players": team2_players,
                     "raw_scores": [],
                     "handicaps": [],
-                    "net_scores": []
+                    "net_scores": [],
+                    "handicap_restrictions_applied": []  # 新增
                 }
             ]
         else:
@@ -582,63 +585,176 @@ class LaSiThreePointScoring:
                 "team_players": team1_players,
                 "raw_scores": [],
                 "handicaps": [],
-                "net_scores": []
+                "net_scores": [],
+                "handicap_restrictions_applied": []  # 新增
             },
             {
                 "team_id": 2,
                 "team_players": team2_players,
                 "raw_scores": [],
                 "handicaps": [],
-                "net_scores": []
+                "net_scores": [],
+                "handicap_restrictions_applied": []  # 新增
             }
         ]
 
-    def _calculate_net_scores(self, hole: Hole, game_data: LaSiGameData, teams: List[Dict[str, Any]]):
-        """计算净杆数（应用让杆）"""
-        self.logger.info("\n--- 计算净杆数（应用让杆）---")
+    def _calculate_scores_with_handicap_restrictions(self, hole: Hole, game_data: LaSiGameData,
+                                                     teams: List[Dict[str, Any]]):
+        """计算净杆数（应用让杆限制条件）- 修复版本"""
+        self.logger.info("\n--- 让杆限制条件检查和应用 ---")
 
+        restrictions = game_data.game_config.handicap_config.restrictions
+
+        # 打印让杆限制配置
+        self.logger.info(f"让杆限制配置:")
+        self.logger.info(f"  - 仅组合PK让杆: {restrictions.only_combination_pk}")
+        self.logger.info(f"  - 打头不让杆: {restrictions.no_leader}")
+        self.logger.info(f"  - Par/鸟/鹰不让杆: {restrictions.no_par_bird_eagle}")
+
+        # 1. 首先收集所有选手的原始信息用于限制条件判断
+        all_players_info = []
         for team in teams:
             for i, player_id in enumerate(team["team_players"]):
                 player_name = next(p.name for p in game_data.players if p.id == player_id)
                 raw_score = team["raw_scores"][i]
+                original_handicap = self._get_player_handicap(player_id, hole.hole_type,
+                                                              game_data.game_config.handicap_settings)
+                score_to_par = raw_score - hole.par
+                achievement = self._get_achievement_name(score_to_par)
 
-                # 获取让杆数
-                handicap = self._get_player_handicap(player_id, hole.hole_type,
-                                                     game_data.game_config.handicap_settings)
+                all_players_info.append({
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "team_id": team["team_id"],
+                    "raw_score": raw_score,
+                    "original_handicap": original_handicap,
+                    "score_to_par": score_to_par,
+                    "achievement": achievement
+                })
 
-                # 检查让杆限制条件
-                effective_handicap = self._apply_handicap_restrictions(
-                    player_id, player_name, handicap, raw_score, hole.par, teams, game_data
-                )
+        # 打印所有选手原始信息
+        self.logger.info("\n所有选手原始信息:")
+        for info in all_players_info:
+            self.logger.info(
+                f"  {info['player_name']}: {info['raw_score']}杆 (让杆{info['original_handicap']}) - {info['achievement']}")
 
-                # 计算净杆数
-                net_score = max(0.5, raw_score - effective_handicap)  # 最小值为0.5
+        # 2. 应用"打头不让杆"限制
+        best_raw_score = min(info["raw_score"] for info in all_players_info)
+        leaders = [info for info in all_players_info if info["raw_score"] == best_raw_score]
 
-                team["handicaps"].append(effective_handicap)
+        if restrictions.no_leader and len(leaders) > 0:
+            self.logger.info(f"\n【打头不让杆】限制生效:")
+            self.logger.info(f"  本洞最好成绩: {best_raw_score}杆")
+            leader_names = [info["player_name"] for info in leaders]
+            self.logger.info(f"  打头选手: {', '.join(leader_names)}")
+
+            for info in all_players_info:
+                if info["raw_score"] == best_raw_score:
+                    info["final_handicap"] = 0.0
+                    info["no_leader_applied"] = True
+                    self.logger.info(f"    {info['player_name']} 原让杆{info['original_handicap']} → 0 (打头不让)")
+                else:
+                    info["final_handicap"] = info["original_handicap"]
+                    info["no_leader_applied"] = False
+        else:
+            self.logger.info(f"\n【打头不让杆】限制未生效 (配置: {restrictions.no_leader})")
+            for info in all_players_info:
+                info["final_handicap"] = info["original_handicap"]
+                info["no_leader_applied"] = False
+
+        # 3. 应用"Par/鸟/鹰不让杆"限制
+        if restrictions.no_par_bird_eagle:
+            self.logger.info(f"\n【Par/鸟/鹰不让杆】限制生效:")
+            for info in all_players_info:
+                if info["score_to_par"] <= 0:  # Par或更好
+                    original_handicap = info["final_handicap"]
+                    info["final_handicap"] = 0.0
+                    info["no_par_bird_eagle_applied"] = True
+                    self.logger.info(
+                        f"  {info['player_name']} 打出{info['achievement']}不让杆: 让杆{original_handicap} → 0")
+                else:
+                    info["no_par_bird_eagle_applied"] = False
+        else:
+            self.logger.info(f"\n【Par/鸟/鹰不让杆】限制未生效 (配置: {restrictions.no_par_bird_eagle})")
+            for info in all_players_info:
+                info["no_par_bird_eagle_applied"] = False
+
+        # 4. 填充队伍数据结构 - 计算净杆数
+        self.logger.info(f"\n净杆数计算:")
+        for team in teams:
+            team["handicaps"].clear()
+            team["net_scores"].clear()
+            team["handicap_restrictions_applied"].clear()
+
+            for i, player_id in enumerate(team["team_players"]):
+                # 找到对应的选手信息
+                player_info = next(info for info in all_players_info if info["player_id"] == player_id)
+
+                final_handicap = player_info["final_handicap"]
+                net_score = max(0.5, player_info["raw_score"] - final_handicap)
+
+                team["handicaps"].append(final_handicap)
                 team["net_scores"].append(net_score)
 
-                if effective_handicap != 0:
-                    self.logger.info(f"  {player_name}: {raw_score}杆 - {effective_handicap}让杆 = {net_score}净杆")
+                # 记录限制条件应用情况
+                restrictions_applied = {
+                    "original_handicap": player_info["original_handicap"],
+                    "final_handicap": final_handicap,
+                    "no_leader_applied": player_info.get("no_leader_applied", False),
+                    "no_par_bird_eagle_applied": player_info.get("no_par_bird_eagle_applied", False)
+                }
+                team["handicap_restrictions_applied"].append(restrictions_applied)
+
+                # 打印净杆计算详情
+                if final_handicap != player_info["original_handicap"]:
+                    applied_restrictions = []
+                    if restrictions_applied["no_leader_applied"]:
+                        applied_restrictions.append("打头不让")
+                    if restrictions_applied["no_par_bird_eagle_applied"]:
+                        applied_restrictions.append(f"{player_info['achievement']}不让")
+
+                    restriction_desc = " + ".join(applied_restrictions)
+                    self.logger.info(
+                        f"  {player_info['player_name']}: {player_info['raw_score']}杆 - {final_handicap}让杆 = {net_score}净杆 ({restriction_desc})")
+                elif final_handicap > 0:
+                    self.logger.info(
+                        f"  {player_info['player_name']}: {player_info['raw_score']}杆 - {final_handicap}让杆 = {net_score}净杆")
                 else:
-                    self.logger.info(f"  {player_name}: {raw_score}杆 (无让杆)")
+                    self.logger.info(
+                        f"  {player_info['player_name']}: {player_info['raw_score']}杆 (无让杆) = {net_score}净杆")
 
-        # 计算队伍统计
+        # 5. 计算队伍统计（用于不同PK模式）
+        combination_mode = game_data.game_config.combination_pk_config.mode
+
         for team in teams:
-            team["best_score"] = min(team["net_scores"])
-            team["worst_score"] = max(team["net_scores"])
+            # 基于净杆数的统计（组合PK和可能的最好/最差PK都会用到）
+            team["best_net_score"] = min(team["net_scores"])
+            team["worst_net_score"] = max(team["net_scores"])
 
-            # 根据组合PK配置计算总分
-            combination_mode = game_data.game_config.combination_pk_config.mode
+            # 基于原始杆数的统计（"仅组合PK让杆"时的最好/最差PK会用到）
+            team["best_raw_score"] = min(team["raw_scores"])
+            team["worst_raw_score"] = max(team["raw_scores"])
+
+            # 组合分数计算 - 总是使用净杆数
             if combination_mode == "双方总杆相乘PK":
-                team["total_score"] = team["net_scores"][0] * team["net_scores"][1]
+                team["combination_net_score"] = team["net_scores"][0] * team["net_scores"][1]
                 self.logger.info(
-                    f"队伍{team['team_id']} 组合分数(相乘): {team['net_scores'][0]} × {team['net_scores'][1]} = {team['total_score']}")
+                    f"队伍{team['team_id']} 组合净分(相乘): {team['net_scores'][0]} × {team['net_scores'][1]} = {team['combination_net_score']}")
             else:  # 默认相加
-                team["total_score"] = sum(team["net_scores"])
+                team["combination_net_score"] = sum(team["net_scores"])
                 self.logger.info(
-                    f"队伍{team['team_id']} 组合分数(相加): {team['net_scores'][0]} + {team['net_scores'][1]} = {team['total_score']}")
+                    f"队伍{team['team_id']} 组合净分(相加): {team['net_scores'][0]} + {team['net_scores'][1]} = {team['combination_net_score']}")
 
-            self.logger.info(f"队伍{team['team_id']} 最好: {team['best_score']}, 最差: {team['worst_score']}")
+            # 如果需要原始杆数的组合分数（当"仅组合PK让杆"未启用时，实际上组合PK也会用净杆数）
+            if combination_mode == "双方总杆相乘PK":
+                team["combination_raw_score"] = team["raw_scores"][0] * team["raw_scores"][1]
+            else:
+                team["combination_raw_score"] = sum(team["raw_scores"])
+
+            self.logger.info(
+                f"队伍{team['team_id']} 净杆统计: 最好{team['best_net_score']}, 最差{team['worst_net_score']}")
+            self.logger.info(
+                f"队伍{team['team_id']} 原始统计: 最好{team['best_raw_score']}, 最差{team['worst_raw_score']}")
 
     def _get_player_handicap(self, player_id: str, hole_type: str,
                              handicap_settings: Dict[str, Dict[str, float]]) -> float:
@@ -647,49 +763,53 @@ class LaSiThreePointScoring:
             return handicap_settings[player_id].get(hole_type, 0.0)
         return 0.0
 
-    def _apply_handicap_restrictions(self, player_id: str, player_name: str, handicap: float,
-                                     raw_score: int, par: int, teams: List[Dict[str, Any]],
-                                     game_data: LaSiGameData) -> float:
-        """应用让杆限制条件"""
-        restrictions = game_data.game_config.handicap_config.restrictions
-
-        # 检查是否为该洞成绩最好的选手（打头不让）
-        if restrictions.no_leader:
-            all_raw_scores = []
-            for team in teams:
-                all_raw_scores.extend(team["raw_scores"])
-
-            if raw_score == min(all_raw_scores):
-                self.logger.info(f"    {player_name} 打头不让杆 (原让杆: {handicap})")
-                return 0.0
-
-        # 检查是否打出Par/鸟/鹰（不让杆）
-        if restrictions.no_par_bird_eagle:
-            score_to_par = raw_score - par
-            if score_to_par <= 0:  # Par或更好
-                achievement = "标准杆" if score_to_par == 0 else ("小鸟" if score_to_par == -1 else "老鹰")
-                self.logger.info(f"    {player_name} 打出{achievement}不让杆 (原让杆: {handicap})")
-                return 0.0
-
-        return handicap
-
     def _execute_pk_comparisons(self, teams: List[Dict[str, Any]], game_config: GameConfig) -> Dict[str, Any]:
-        """执行三项比较PK"""
+        """执行三项比较PK - 修复支持"仅组合PK让杆"限制"""
         self.logger.info("\n--- 三项比较PK ---")
 
         team1, team2 = teams[0], teams[1]
         base_score = game_config.base_score
+        restrictions = game_config.handicap_config.restrictions
 
-        # 最好成绩PK
-        best_pk = self._compare_scores("最好成绩PK", team1["best_score"], team2["best_score"], base_score)
+        # 检查是否启用"仅组合PK让杆"
+        if restrictions.only_combination_pk:
+            self.logger.info("【仅组合PK让杆】限制生效: 最好/最差PK使用原始杆数，组合PK使用净杆数")
 
-        # 最差成绩PK
-        worst_pk = self._compare_scores("最差成绩PK", team1["worst_score"], team2["worst_score"], base_score)
+            # 最好成绩PK - 使用原始杆数
+            best_pk = self._compare_scores("最好成绩PK(原始杆数)", team1["best_raw_score"], team2["best_raw_score"],
+                                           base_score)
+            best_pk["score_type"] = "raw"  # 标记使用原始杆数
 
-        # 组合PK
-        combination_mode = game_config.combination_pk_config.mode
-        combination_pk = self._compare_scores(f"组合PK({combination_mode})",
-                                              team1["total_score"], team2["total_score"], base_score)
+            # 最差成绩PK - 使用原始杆数
+            worst_pk = self._compare_scores("最差成绩PK(原始杆数)", team1["worst_raw_score"], team2["worst_raw_score"],
+                                            base_score)
+            worst_pk["score_type"] = "raw"  # 标记使用原始杆数
+
+            # 组合PK - 使用净杆数
+            combination_mode = game_config.combination_pk_config.mode
+            combination_pk = self._compare_scores(f"组合PK({combination_mode},净杆数)",
+                                                  team1["combination_net_score"], team2["combination_net_score"],
+                                                  base_score)
+            combination_pk["score_type"] = "net"  # 标记使用净杆数
+
+        else:
+            self.logger.info("【仅组合PK让杆】限制未生效: 所有PK均使用净杆数")
+
+            # 所有PK都使用净杆数
+            best_pk = self._compare_scores("最好成绩PK(净杆数)", team1["best_net_score"], team2["best_net_score"],
+                                           base_score)
+            best_pk["score_type"] = "net"
+
+            worst_pk = self._compare_scores("最差成绩PK(净杆数)", team1["worst_net_score"], team2["worst_net_score"],
+                                            base_score)
+            worst_pk["score_type"] = "net"
+
+            combination_mode = game_config.combination_pk_config.mode
+            combination_pk = self._compare_scores(f"组合PK({combination_mode},净杆数)",
+                                                  team1["combination_net_score"], team2["combination_net_score"],
+                                                  base_score)
+            combination_pk["score_type"] = "net"
+
         combination_pk["combination_mode"] = combination_mode
 
         return {
@@ -742,15 +862,15 @@ class LaSiThreePointScoring:
         team1, team2 = teams[0], teams[1]
 
         # 双杀条件：一队最差成绩比对方最好成绩还要好（基于净杆数）
-        team1_double_kill = team1["worst_score"] < team2["best_score"]
-        team2_double_kill = team2["worst_score"] < team1["best_score"]
+        team1_double_kill = team1["worst_net_score"] < team2["best_net_score"]
+        team2_double_kill = team2["worst_net_score"] < team1["best_net_score"]
 
         if team1_double_kill:
             winner_team = 1
-            self.logger.info(f"双杀触发！队伍1最差({team1['worst_score']}) < 队伍2最好({team2['best_score']})")
+            self.logger.info(f"双杀触发！队伍1最差({team1['worst_net_score']}) < 队伍2最好({team2['best_net_score']})")
         elif team2_double_kill:
             winner_team = 2
-            self.logger.info(f"双杀触发！队伍2最差({team2['worst_score']}) < 队伍1最好({team1['best_score']})")
+            self.logger.info(f"双杀触发！队伍2最差({team2['worst_net_score']}) < 队伍1最好({team1['best_net_score']})")
         else:
             self.logger.info("无双杀")
             return {"triggered": False, "team_id": None, "reward_points": 0}
@@ -1204,44 +1324,6 @@ class LaSiThreePointScoring:
         self.logger.info("未满足收取条件，返回0")
         return 0, 0
 
-    # 删除重复的函数定义，只保留一个
-    def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
-        """获取队伍中的最好成就"""
-        best_score_to_par = float('inf')
-
-        for i, player_id in enumerate(team["team_players"]):
-            raw_score = team["raw_scores"][i]
-            score_to_par = raw_score - par
-            if score_to_par < best_score_to_par:
-                best_score_to_par = score_to_par
-
-        return self._get_achievement_name(best_score_to_par)
-
-    # 删除重复的函数定义，只保留一个
-    def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
-        """获取队伍中的最好成就"""
-        best_score_to_par = float('inf')
-
-        for i, player_id in enumerate(team["team_players"]):
-            raw_score = team["raw_scores"][i]
-            score_to_par = raw_score - par
-            if score_to_par < best_score_to_par:
-                best_score_to_par = score_to_par
-
-        return self._get_achievement_name(best_score_to_par)
-
-    def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
-        """获取队伍中的最好成就"""
-        best_score_to_par = float('inf')
-
-        for i, player_id in enumerate(team["team_players"]):
-            raw_score = team["raw_scores"][i]
-            score_to_par = raw_score - par
-            if score_to_par < best_score_to_par:
-                best_score_to_par = score_to_par
-
-        return self._get_achievement_name(best_score_to_par)
-
     def _get_best_achievement_in_team(self, team: Dict[str, Any], par: int) -> str:
         """获取队伍中的最好成就"""
         best_score_to_par = float('inf')
@@ -1514,12 +1596,6 @@ class LaSiThreePointScoring:
         self.logger.info(f"下洞开球顺序: {', '.join(next_order_names)}")
 
         return next_order
-
-    def _get_players_from_teams(self, teams: List[Dict[str, Any]]) -> List:
-        """从队伍数据中获取选手信息的辅助方法"""
-        # 这需要访问game_data.players，需要修改函数签名传入players参数
-        # 或者在类中保存players引用
-        pass
 
     def _update_scoring_state(self, scoring_state: Dict[str, Any], hole_result: Dict[str, Any]):
         """更新累积计分状态"""
