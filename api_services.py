@@ -13,7 +13,7 @@ from llm_api_service.llm_chat import optimized_multi_round_dialogue, OptimizedDi
 from llm_api_service.chat_rating import chat_rating, ChatRatingInfo
 from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
-from llm_api_service.three_point_las_vegas_simple import calculate_simple_lasi_score, SimpleLaSiGameData
+from llm_api_service.three_point_las_vegas_simple import calculate_tee_order, LaSiGameData
 from llm_api_service.stroke_and_match_combo import calculate_stroke_match_score, StrokeMatchGameData
 
 app = FastAPI()
@@ -34,6 +34,7 @@ app = FastAPI()
 12. golf_llm 高尔夫相关问题的智能回复接口
 13. three_point_las_vegas 高尔夫游戏 拉丝3点
 14. stroke_match_combo 高尔夫游戏 比杆比洞
+15. tee_order_calculation 高尔夫游戏 击球顺序计算（临时接口）
 """
 
 
@@ -129,6 +130,33 @@ def lasi_scoring_fun(game_data: LaSiGameData):
 def stroke_match_combo_fun(game_data: StrokeMatchGameData):
     result = calculate_stroke_match_score(game_data)
     return result
+
+
+# 在所有接口定义的最后添加新的接口：
+
+@app.post("/tee_order_calculation")
+def tee_order_calculation_fun(game_data: LaSiGameData):
+    """
+    拉丝三点高尔夫击球顺序计算接口
+
+    功能：
+    - 计算乱拉模式下每洞的击球顺序
+    - 基于上一洞净杆数排序
+    - 应用让杆规则和让杆限制条件
+    - 填充并返回完整的tee_order数据
+
+    参数：
+    - game_data: LaSiGameData - 游戏数据，第一洞tee_order需完整，其他洞tee_order可为空
+
+    返回：
+    - LaSiGameData - 填充好所有洞tee_order的完整数据
+    """
+    try:
+        result = calculate_tee_order(game_data)
+        return result
+    except Exception as e:
+        # 可以根据需要返回更详细的错误信息
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":
