@@ -15,6 +15,7 @@ from llm_api_service.golf_llm import golf_llm_chat, GolfLLMInfo
 from llm_api_service.three_point_las_vegas import calculate_lasi_score, LaSiGameData
 from llm_api_service.three_point_las_vegas_simple import calculate_tee_order, LaSiGameData
 from llm_api_service.stroke_and_match_combo import calculate_stroke_match_score, StrokeMatchGameData
+from llm_api_service.golf_combined_scoring import golf_combined_scoring, GolfCombinedGameData
 
 app = FastAPI()
 
@@ -35,6 +36,7 @@ app = FastAPI()
 13. three_point_las_vegas 高尔夫游戏 拉丝3点
 14. stroke_match_combo 高尔夫游戏 比杆比洞
 15. tee_order_calculation 高尔夫游戏 击球顺序计算（临时接口）
+16. golf_combined_score 高尔夫综合计分接口（整合拉丝3点和挂杆挂洞）[临时接口]
 """
 
 
@@ -156,6 +158,30 @@ def tee_order_calculation_fun(game_data: LaSiGameData):
         return result
     except Exception as e:
         # 可以根据需要返回更详细的错误信息
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/golf_combined_score")
+def golf_combined_score_fun(combined_data: GolfCombinedGameData):
+    """
+    高尔夫综合计分接口
+
+    功能：
+    - 整合拉丝3点和挂杆挂洞两种比赛模式的计分
+    - 返回每个选手在两种比赛中的得分汇总
+    - 计算每个选手的总分
+
+    参数：
+    - combined_data: GolfCombinedGameData - 包含两种比赛数据的综合对象
+
+    返回：
+    - Dict - 包含每个选手分数汇总的结果
+    """
+    try:
+        result = golf_combined_scoring(combined_data)
+        return result
+    except Exception as e:
+        # 直接抛异常，按需求要求
         raise HTTPException(status_code=400, detail=str(e))
 
 
